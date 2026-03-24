@@ -2,42 +2,92 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Pixel Battle 1000x1000</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Battle PRO 1000x1000</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: sans-serif; touch-action: none; }
-        #game-container { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
+        body { margin: 0; overflow: hidden; background-color: #121212; font-family: sans-serif; touch-action: none; user-select: none; }
+        
+        #game-container { width: 100vw; height: 100vh; position: relative; overflow: hidden; cursor: crosshair; }
         #canvas {
             position: absolute; top: 0; left: 0;
             image-rendering: pixelated; background-color: white;
-            transform-origin: 0 0; border: 2px solid #333;
+            transform-origin: 0 0; border: 1px solid #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
+        
+        /* Исправленный прицел */
         #cursor-hint {
             position: absolute; pointer-events: none;
-            border: 1px solid white; box-sizing: border-box; display: none; z-index: 5;
-            box-shadow: 0 0 2px black;
+            border: 2px solid #fff; box-sizing: border-box; display: none; z-index: 5;
+            box-shadow: 0 0 4px #000;
         }
+
+        /* Интерфейс */
         #top-ui {
             position: fixed; top: 15px; left: 15px; right: 15px;
             display: flex; justify-content: space-between; pointer-events: none; z-index: 100;
         }
         .glass {
-            background: rgba(0, 0, 0, 0.85); color: white; padding: 10px 15px;
+            background: rgba(0, 0, 0, 0.85); color: white; padding: 10px 18px;
             border-radius: 12px; font-family: monospace; font-size: 14px;
+            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
         }
+
         #bottom-ui {
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: rgba(25, 25, 25, 0.98); padding: 15px; border-radius: 25px;
-            display: flex; flex-direction: column; align-items: center; gap: 15px;
-            z-index: 100; border: 1px solid #444; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%);
+            background: rgba(20, 20, 20, 0.98); padding: 12px 20px; border-radius: 30px;
+            display: flex; align-items: center; gap: 15px; z-index: 100;
+            border: 1px solid #444; box-shadow: 0 10px 40px rgba(0,0,0,0.6);
         }
-        #palette { display: flex; gap: 10px; overflow-x: auto; max-width: 90vw; padding: 5px; }
+
+        /* Кнопка открытия палитры */
+        #palette-toggle {
+            width: 45px; height: 45px; border-radius: 15px; cursor: pointer;
+            background: linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+            border: 3px solid #fff; box-shadow: 0 0 10px rgba(255,255,255,0.3);
+            transition: 0.2s; display: flex; align-items: center; justify-content: center;
+            font-size: 20px; color: white; text-shadow: 0 1px 2px #000;
+        }
+        #palette-toggle:active { transform: scale(0.9); }
+
+        /* Выбранный цвет в главном меню */
+        #active-color-preview {
+            width: 35px; height: 35px; border-radius: 10px; border: 2px solid #555;
+        }
+
+        /* Большая скрытая палитра */
+        #full-palette-popup {
+            position: fixed; bottom: -100%; left: 0; right: 0; height: 70vh;
+            background: rgba(15, 15, 15, 0.98); border-top: 2px solid #444;
+            border-radius: 30px 30px 0 0; z-index: 200;
+            transition: bottom 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+            padding: 30px; display: flex; flex-direction: column; align-items: center;
+            box-shadow: 0 -15px 50px rgba(0,0,0,0.7); backdrop-filter: blur(15px);
+        }
+        #full-palette-popup.open { bottom: 0; }
+        
+        #palette-grid {
+            display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px;
+            width: 100%; max-width: 600px; height: 100%; overflow-y: auto;
+            padding-right: 10px;
+        }
+        
         .color-btn {
-            width: 38px; height: 38px; border-radius: 12px; cursor: pointer;
-            border: 3px solid transparent; flex-shrink: 0;
+            aspect-ratio: 1; border-radius: 12px; cursor: pointer;
+            border: 3px solid transparent; transition: 0.15s;
         }
-        .color-btn.active { border-color: #fff; transform: scale(1.15); }
-        #timer { color: #888; font-size: 14px; font-weight: bold; }
+        .color-btn:active { transform: scale(0.9); }
+        .color-btn.active { border-color: #fff; transform: scale(1.1); box-shadow: 0 0 15px rgba(255,255,255,0.5); }
+
+        #timer { color: #888; font-size: 14px; font-weight: bold; letter-spacing: 1px; }
+
+        /* Кнопка закрытия палитры */
+        #close-palette {
+            position: absolute; top: 15px; right: 15px;
+            background: rgba(255,255,255,0.1); color: #fff; border: none;
+            width: 40px; height: 40px; border-radius: 20px; font-size: 20px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
     </style>
 </head>
 <body>
@@ -53,8 +103,15 @@
     </div>
     
     <div id="bottom-ui">
-        <div id="palette"></div>
+        <div id="palette-toggle">🌈</div>
+        <div id="active-color-preview"></div>
         <div id="timer">Загрузка...</div>
+    </div>
+
+    <div id="full-palette-popup">
+        <button id="close-palette">✕</button>
+        <h3 style="color:white; margin-top:0; margin-bottom:20px;">Выбери цвет (50 оттенков)</h3>
+        <div id="palette-grid"></div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -64,48 +121,72 @@
         const ctx = canvas.getContext('2d');
         const cursorHint = document.getElementById('cursor-hint');
         const timerEl = document.getElementById('timer');
-        const paletteEl = document.getElementById('palette');
+        const paletteGridEl = document.getElementById('palette-grid');
+        const palettePopupEl = document.getElementById('full-palette-popup');
+        const paletteToggleEl = document.getElementById('palette-toggle');
+        const closePaletteEl = document.getElementById('close-palette');
+        const activeColorPreviewEl = document.getElementById('active-color-preview');
 
+        // Кулдаун (оставил 3 сек, как ты просил)
         const COOLDOWN_MS = 3000; 
         let lastPlacedTime = 0;
-        const colors = ['#000', '#FFF', '#BE0039', '#FF4500', '#FFA800', '#FFD635', '#00A368', '#7EED56', '#2450A4', '#3690EA', '#51E9F4', '#811E9F', '#B44AC0', '#FF99AA', '#9C6926', '#898D90'];
-        let selectedColor = colors[2];
 
-        // Центрируем 1000x1000 при старте
+        // Палитра на 50 цветов (с красивыми переходами)
+        const colors50 = [
+            '#000000', '#FFFFFF', '#6d6e71', '#bcbec0', '#ee1c24', '#f15b22', '#f7941d', '#fff200', '#8dc63f', '#00a651',
+            '#00aeef', '#2e3192', '#662d91', '#ec008c', '#a0410d', '#f79ac1', '#fbc9e1', '#b7daeb', '#f6f6b0', '#c8e6b3',
+            '#FFD700', '#FF8C00', '#FF4500', '#FF0000', '#DC143C', '#B22222', '#8B0000', '#C71585', '#D2691E', '#CD853F',
+            '#F4A460', '#DEB887', '#D2B48C', '#BC8F8F', '#A52A2A', '#8B4513', '#556B2F', '#808000', '#6B8E23', '#9ACD32',
+            '#32CD32', '#3CB371', '#00FA9A', '#008080', '#00CED1', '#4682B4', '#1E90FF', '#00008B', '#191970', '#800080'
+        ];
+        let selectedColor = colors50[4]; // Дефолтный красный
+
+        // Камера
         let scale = Math.min(window.innerWidth, window.innerHeight) / 1000;
         let panX = (window.innerWidth - 1000 * scale) / 2;
         let panY = (window.innerHeight - 1000 * scale) / 2;
-        
         let isDragging = false;
         let startX, startY;
         let hasMoved = false;
         let lastTouchDist = null;
 
-        colors.forEach(color => {
+        // Создание мега-палитры
+        colors50.forEach(color => {
             const btn = document.createElement('div');
             btn.className = 'color-btn';
             btn.style.backgroundColor = color;
             if(color === selectedColor) btn.classList.add('active');
+            
             btn.onclick = () => {
                 document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 selectedColor = color;
+                activeColorPreviewEl.style.backgroundColor = color;
+                palettePopupEl.classList.remove('open'); // Закрываем при выборе
             };
-            paletteEl.appendChild(btn);
+            paletteGridEl.appendChild(btn);
         });
+        activeColorPreviewEl.style.backgroundColor = selectedColor;
+
+        // Логика открытия палитры
+        paletteToggleEl.onclick = () => palettePopupEl.classList.toggle('open');
+        closePaletteEl.onclick = () => palettePopupEl.classList.remove('open');
 
         function updateTransform() {
             canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-            canvas.style.backgroundImage = scale > 8 ? 
+            canvas.style.backgroundImage = scale > 15 ? 
                 `linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px), 
                  linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px)` : 'none';
             canvas.style.backgroundSize = "1px 1px";
         }
 
+        // --- ИСПРАВЛЕННЫЙ РАСЧЕТ КООРДИНАТ ---
         function getCoords(clientX, clientY) {
+            // Учитываем точный сдвиг и масштаб
+            const rect = canvas.getBoundingClientRect();
             return {
-                x: Math.floor((clientX - panX) / scale),
-                y: Math.floor((clientY - panY) / scale)
+                x: Math.floor((clientX - rect.left) / scale),
+                y: Math.floor((clientY - rect.top) / scale)
             };
         }
 
@@ -136,6 +217,7 @@
         }, {passive: false});
 
         window.addEventListener('touchmove', (e) => {
+            if (palettePopupEl.classList.contains('open')) return; // Не двигаем камеру, если открыта палитра
             e.preventDefault();
             const cx = e.touches[0].clientX;
             const cy = e.touches[0].clientY;
@@ -146,7 +228,8 @@
             } else if (e.touches.length === 2) {
                 const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                 const delta = dist / lastTouchDist;
-                const newScale = Math.max(0.1, Math.min(scale * delta, 500));
+                // Зум до 800
+                const newScale = Math.max(0.1, Math.min(scale * delta, 800));
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                 panX = midX - (midX - panX) * (newScale / scale);
@@ -159,6 +242,7 @@
         }, {passive: false});
 
         window.addEventListener('touchend', (e) => {
+            if (palettePopupEl.classList.contains('open')) return;
             if (!hasMoved && !lastTouchDist) {
                 const touch = e.changedTouches[0];
                 placePixel(getCoords(touch.clientX, touch.clientY));
@@ -168,9 +252,11 @@
 
         // Мышь
         window.addEventListener('mousedown', (e) => {
+            if (e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup')) return;
             isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY;
         });
         window.addEventListener('mousemove', (e) => {
+            if (palettePopupEl.classList.contains('open')) return;
             const c = getCoords(e.clientX, e.clientY);
             updateUI(c);
             if (!isDragging) return;
@@ -178,13 +264,15 @@
             updateTransform();
         });
         window.addEventListener('mouseup', (e) => {
+            if (e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup')) return;
             if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY));
             isDragging = false;
         });
         window.addEventListener('wheel', (e) => {
+            if (palettePopupEl.classList.contains('open')) return;
             e.preventDefault();
             const delta = e.deltaY > 0 ? 0.8 : 1.25;
-            const newScale = Math.max(0.1, Math.min(scale * delta, 500));
+            const newScale = Math.max(0.1, Math.min(scale * delta, 800));
             panX = e.clientX - (e.clientX - panX) * (newScale / scale);
             panY = e.clientY - (e.clientY - panY) * (newScale / scale);
             scale = newScale;
@@ -194,10 +282,12 @@
         function updateUI(c) {
             if(c.x >= 0 && c.x < 1000 && c.y >= 0 && c.y < 1000) {
                 document.getElementById('coords').textContent = `X: ${c.x}, Y: ${c.y}`;
-                if(scale > 4) {
+                // Подсветка пикселя (прицел)
+                if(scale > 3) {
                     cursorHint.style.display = 'block';
                     cursorHint.style.width = scale + 'px';
                     cursorHint.style.height = scale + 'px';
+                    // Точное позиционирование hint
                     cursorHint.style.left = (c.x * scale + panX) + 'px';
                     cursorHint.style.top = (c.y * scale + panY) + 'px';
                 }
