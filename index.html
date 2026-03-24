@@ -3,53 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Pixel Battle Ultra Zoom</title>
+    <title>Pixel Battle 1000x1000</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #0b0b0b; font-family: sans-serif; user-select: none; touch-action: none; }
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: sans-serif; touch-action: none; }
         #game-container { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
         #canvas {
             position: absolute; top: 0; left: 0;
             image-rendering: pixelated; background-color: white;
-            transform-origin: 0 0;
+            transform-origin: 0 0; border: 2px solid #333;
         }
         #cursor-hint {
             position: absolute; pointer-events: none;
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            box-sizing: border-box; display: none; z-index: 5;
-            box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+            border: 1px solid white; box-sizing: border-box; display: none; z-index: 5;
+            box-shadow: 0 0 2px black;
         }
         #top-ui {
-            position: fixed; top: 10px; left: 10px; right: 10px;
+            position: fixed; top: 15px; left: 15px; right: 15px;
             display: flex; justify-content: space-between; pointer-events: none; z-index: 100;
         }
         .glass {
-            background: rgba(0, 0, 0, 0.8); color: white; padding: 8px 12px;
-            border-radius: 8px; font-family: monospace; font-size: 14px;
+            background: rgba(0, 0, 0, 0.85); color: white; padding: 10px 15px;
+            border-radius: 12px; font-family: monospace; font-size: 14px;
         }
         #bottom-ui {
-            position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%);
-            background: rgba(20, 20, 20, 0.95); padding: 15px; border-radius: 25px;
-            display: flex; flex-direction: column; align-items: center; gap: 12px;
-            z-index: 100; border: 1px solid rgba(255,255,255,0.1);
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(25, 25, 25, 0.98); padding: 15px; border-radius: 25px;
+            display: flex; flex-direction: column; align-items: center; gap: 15px;
+            z-index: 100; border: 1px solid #444; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        #palette { display: flex; gap: 8px; }
+        #palette { display: flex; gap: 10px; overflow-x: auto; max-width: 90vw; padding: 5px; }
         .color-btn {
-            width: 35px; height: 35px; border-radius: 10px; cursor: pointer;
-            border: 2px solid transparent; transition: 0.2s;
+            width: 38px; height: 38px; border-radius: 12px; cursor: pointer;
+            border: 3px solid transparent; flex-shrink: 0;
         }
-        .color-btn.active { border-color: white; transform: scale(1.2); }
-        #timer { color: #888; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        .color-btn.active { border-color: #fff; transform: scale(1.15); }
+        #timer { color: #888; font-size: 14px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="top-ui">
         <div class="glass" id="coords">X: 0, Y: 0</div>
-        <div class="glass">Online: <span id="online-count">0</span></div>
+        <div class="glass">Онлайн: <span id="online-count">0</span></div>
     </div>
 
     <div id="game-container">
-        <canvas id="canvas" width="5000" height="5000"></canvas>
+        <canvas id="canvas" width="1000" height="1000"></canvas>
         <div id="cursor-hint"></div>
     </div>
     
@@ -67,14 +66,16 @@
         const timerEl = document.getElementById('timer');
         const paletteEl = document.getElementById('palette');
 
-        const COOLDOWN_MS = 5000;
+        const COOLDOWN_MS = 3000; // Уменьшил до 3 секунд для драйва
         let lastPlacedTime = 0;
-        const colors = ['#000000','#FFFFFF','#E43333','#33E433','#3333E4','#F3E926','#FF8C00','#8B4513','#FF69B4','#7E2553'];
+        const colors = ['#000', '#FFF', '#BE0039', '#FF4500', '#FFA800', '#FFD635', '#00A368', '#7EED56', '#2450A4', '#3690EA', '#51E9F4', '#811E9F', '#B44AC0', '#FF99AA', '#9C6926', '#898D90'];
         let selectedColor = colors[2];
 
-        let scale = 0.5; 
-        let panX = window.innerWidth/2 - 2500 * 0.5;
-        let panY = window.innerHeight/2 - 2500 * 0.5;
+        // Центрируем 1000x1000 при старте
+        let scale = Math.min(window.innerWidth, window.innerHeight) / 1000;
+        let panX = (window.innerWidth - 1000 * scale) / 2;
+        let panY = (window.innerHeight - 1000 * scale) / 2;
+        
         let isDragging = false;
         let startX, startY;
         let hasMoved = false;
@@ -95,10 +96,9 @@
 
         function updateTransform() {
             canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-            // Сетка появляется только при ОЧЕНЬ сильном зуме
-            canvas.style.backgroundImage = scale > 15 ? 
-                `linear-gradient(to right, rgba(0,0,0,0.2) 1px, transparent 1px), 
-                 linear-gradient(to bottom, rgba(0,0,0,0.2) 1px, transparent 1px)` : 'none';
+            canvas.style.backgroundImage = scale > 8 ? 
+                `linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px), 
+                 linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px)` : 'none';
             canvas.style.backgroundSize = "1px 1px";
         }
 
@@ -116,14 +116,14 @@
                 ctx.fillStyle = color;
                 ctx.fillRect(x, y, 1, 1);
             });
-            timerEl.textContent = "Готов!";
+            timerEl.textContent = "ПОЕХАЛИ!";
         });
         socket.on('updatePixel', (data) => {
             ctx.fillStyle = data.color;
             ctx.fillRect(data.x, data.y, 1, 1);
         });
 
-        // УПРАВЛЕНИЕ ТАЧАМИ (ДЛЯ ТЕЛЕФОНА)
+        // Тач-управление
         window.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true; hasMoved = false;
@@ -137,42 +137,38 @@
 
         window.addEventListener('touchmove', (e) => {
             e.preventDefault();
+            const cx = e.touches[0].clientX;
+            const cy = e.touches[0].clientY;
+
             if (e.touches.length === 1 && isDragging) {
                 hasMoved = true;
-                panX = e.touches[0].clientX - startX;
-                panY = e.touches[0].clientY - startY;
+                panX = cx - startX; panY = cy - startY;
             } else if (e.touches.length === 2) {
                 const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                 const delta = dist / lastTouchDist;
-                const newScale = Math.max(0.01, Math.min(scale * delta, 800)); // ЛИМИТ ЗУМА 800
-                
+                const newScale = Math.max(0.1, Math.min(scale * delta, 500));
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
                 panX = midX - (midX - panX) * (newScale / scale);
                 panY = midY - (midY - panY) * (newScale / scale);
                 scale = newScale;
                 lastTouchDist = dist;
             }
-            
-            const touch = e.touches[0];
-            const c = getCoords(touch.clientX, touch.clientY);
-            updateUI(c);
+            updateUI(getCoords(cx, cy));
             updateTransform();
         }, {passive: false});
 
         window.addEventListener('touchend', (e) => {
             if (!hasMoved && !lastTouchDist) {
                 const touch = e.changedTouches[0];
-                const c = getCoords(touch.clientX, touch.clientY);
-                placePixel(c);
+                placePixel(getCoords(touch.clientX, touch.clientY));
             }
             isDragging = false; lastTouchDist = null;
         });
 
-        // МЫШКА (ДЛЯ ПК)
+        // Мышь
         window.addEventListener('mousedown', (e) => {
-            if(e.button === 0) { isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY; }
+            isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY;
         });
         window.addEventListener('mousemove', (e) => {
             const c = getCoords(e.clientX, e.clientY);
@@ -182,14 +178,13 @@
             updateTransform();
         });
         window.addEventListener('mouseup', (e) => {
-            if(!hasMoved && isDragging) { const c = getCoords(e.clientX, e.clientY); placePixel(c); }
+            if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY));
             isDragging = false;
         });
-
         window.addEventListener('wheel', (e) => {
             e.preventDefault();
             const delta = e.deltaY > 0 ? 0.8 : 1.25;
-            const newScale = Math.max(0.01, Math.min(scale * delta, 800));
+            const newScale = Math.max(0.1, Math.min(scale * delta, 500));
             panX = e.clientX - (e.clientX - panX) * (newScale / scale);
             panY = e.clientY - (e.clientY - panY) * (newScale / scale);
             scale = newScale;
@@ -197,9 +192,9 @@
         }, {passive: false});
 
         function updateUI(c) {
-            if(c.x >= 0 && c.x < 5000 && c.y >= 0 && c.y < 5000) {
+            if(c.x >= 0 && c.x < 1000 && c.y >= 0 && c.y < 1000) {
                 document.getElementById('coords').textContent = `X: ${c.x}, Y: ${c.y}`;
-                if(scale > 5) {
+                if(scale > 4) {
                     cursorHint.style.display = 'block';
                     cursorHint.style.width = scale + 'px';
                     cursorHint.style.height = scale + 'px';
@@ -211,7 +206,7 @@
 
         function placePixel(c) {
             if (Date.now() - lastPlacedTime < COOLDOWN_MS) return;
-            if (c.x < 0 || c.x >= 5000 || c.y < 0 || c.y >= 5000) return;
+            if (c.x < 0 || c.x >= 1000 || c.y < 0 || c.y >= 1000) return;
             ctx.fillStyle = selectedColor;
             ctx.fillRect(c.x, c.y, 1, 1);
             socket.emit('drawPixel', { x: c.x, y: c.y, color: selectedColor });
@@ -220,8 +215,8 @@
 
         setInterval(() => {
             const diff = Date.now() - lastPlacedTime;
-            if (diff >= COOLDOWN_MS) { timerEl.textContent = "Можно рисовать"; timerEl.style.color = "#4ade80"; }
-            else { timerEl.textContent = `Жди: ${Math.ceil((COOLDOWN_MS - diff)/1000)}с`; timerEl.style.color = "#f87171"; }
+            if (diff >= COOLDOWN_MS) { timerEl.textContent = "МОЖНО!"; timerEl.style.color = "#4ade80"; }
+            else { timerEl.textContent = `ЖДИ: ${Math.ceil((COOLDOWN_MS - diff)/1000)}с`; timerEl.style.color = "#f87171"; }
         }, 100);
 
         updateTransform();
