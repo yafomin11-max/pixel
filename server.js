@@ -1,52 +1,48 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const sqlite3 = require('sqlite3').verbose(); // Переходим на SQLite
-const path = require('path');
+const { Client } = require('pg');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Настройки пути
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
-// Инициализация базы данных SQLite
-const db = new sqlite3.Database('./pixels.db', (err) => {
-    if (err) console.error('Ошибка БД:', err.message);
-    console.log('Подключено к базе данных SQLite.');
+const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
 });
 
-// Создаем таблицу, если её нет
-db.run(`CREATE TABLE IF NOT EXISTS pixels (
+client.connect()
+    .then(() => console.log('Подключено к БД'))
+    .catch(err => console.error('Ошибка БД:', err));
+
+// Таблица для поля 1000x1000
+client.query(`CREATE TABLE IF NOT EXISTS pixels (
     pos_key TEXT PRIMARY KEY,
     color TEXT
 )`);
 
 let onlineUsers = 0;
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     onlineUsers++;
     io.emit('userCount', onlineUsers);
 
-    // При входе игрока выгружаем ВСЕ закрашенные пиксели из базы
-    db.all("SELECT pos_key, color FROM pixels", [], (err, rows) => {
-        if (err) return console.error(err.message);
-        // Превращаем массив строк обратно в формат [ [key, color], ... ]
-        const boardData = rows.map(row => [row.pos_key, row.color]);
-        socket.emit('initBoard', boardData);
-    });
+    try {
+        const res = await client.query("SELECT pos_key, color FROM pixels");
+        socket.emit('initBoard', res.rows.map(row => [row.pos_key, row.color]));
+    } catch (err) { console.error(err); }
 
-    // Когда кто-то рисует
     socket.on('drawPixel', (data) => {
-        const key = `${data.x},${data.y}`;
-        
-        // Сохраняем/обновляем в базе данных
-        db.run(`INSERT INTO pixels(pos_key, color) VALUES(?, ?)
-                ON CONFLICT(pos_key) DO UPDATE SET color=excluded.color`, 
-                [key, data.color]);
+        // Проверка границ 1000x1000
+        if (data.x < 0 || data.x >= 1000 || data.y < 0 || data.y >= 1000) return;
 
-        // Рассылаем всем остальным
+        const key = `${data.x},${data.y}`;
+        client.query(`INSERT INTO pixels(pos_key, color) 
+                      VALUES($1, $2) 
+                      ON CONFLICT(pos_key) DO UPDATE SET color = $2`, [key, data.color]);
         socket.broadcast.emit('updatePixel', data);
     });
 
@@ -56,8 +52,5 @@ io.on('connection', (socket) => {
     });
 });
 
-// ПОРТ: Очень важно для Amvera и других хостингов
-const PORT = process.env.PORT || 80; 
-server.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
-});
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => console.log(`Сервер 1000x1000 запущен!`));
