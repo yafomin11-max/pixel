@@ -3,115 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Battle PRO 1000x1000</title>
+    <title>Pixel Battle Final</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #121212; font-family: sans-serif; touch-action: none; user-select: none; }
-        
-        #game-container { width: 100vw; height: 100vh; position: relative; overflow: hidden; cursor: crosshair; }
+        #game-container { width: 100vw; height: 100vh; position: relative; overflow: hidden; background: #000; }
         #canvas {
             position: absolute; top: 0; left: 0;
             image-rendering: pixelated; background-color: white;
-            transform-origin: 0 0; border: 1px solid #333;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            transform-origin: 0 0; 
         }
-        
-        /* Исправленный прицел */
         #cursor-hint {
             position: absolute; pointer-events: none;
             border: 2px solid #fff; box-sizing: border-box; display: none; z-index: 5;
             box-shadow: 0 0 4px #000;
         }
-
-        /* Интерфейс */
-        #top-ui {
-            position: fixed; top: 15px; left: 15px; right: 15px;
-            display: flex; justify-content: space-between; pointer-events: none; z-index: 100;
-        }
-        .glass {
-            background: rgba(0, 0, 0, 0.85); color: white; padding: 10px 18px;
-            border-radius: 12px; font-family: monospace; font-size: 14px;
-            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
-        }
-
+        #top-ui { position: fixed; top: 15px; left: 15px; right: 15px; display: flex; justify-content: space-between; pointer-events: none; z-index: 100; }
+        .glass { background: rgba(0, 0, 0, 0.8); color: white; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 12px; border: 1px solid #333; }
         #bottom-ui {
-            position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%);
-            background: rgba(20, 20, 20, 0.98); padding: 12px 20px; border-radius: 30px;
-            display: flex; align-items: center; gap: 15px; z-index: 100;
-            border: 1px solid #444; box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: #1a1a1a; padding: 10px 20px; border-radius: 40px;
+            display: flex; align-items: center; gap: 12px; z-index: 100; border: 1px solid #444;
         }
-
-        /* Кнопка открытия палитры */
-        #palette-toggle {
-            width: 45px; height: 45px; border-radius: 15px; cursor: pointer;
-            background: linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
-            border: 3px solid #fff; box-shadow: 0 0 10px rgba(255,255,255,0.3);
-            transition: 0.2s; display: flex; align-items: center; justify-content: center;
-            font-size: 20px; color: white; text-shadow: 0 1px 2px #000;
-        }
-        #palette-toggle:active { transform: scale(0.9); }
-
-        /* Выбранный цвет в главном меню */
-        #active-color-preview {
-            width: 35px; height: 35px; border-radius: 10px; border: 2px solid #555;
-        }
-
-        /* Большая скрытая палитра */
+        #palette-toggle { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(45deg, red, orange, yellow, green, blue, purple); border: 2px solid white; cursor: pointer; }
+        #active-color-preview { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #555; }
         #full-palette-popup {
-            position: fixed; bottom: -100%; left: 0; right: 0; height: 70vh;
-            background: rgba(15, 15, 15, 0.98); border-top: 2px solid #444;
-            border-radius: 30px 30px 0 0; z-index: 200;
-            transition: bottom 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
-            padding: 30px; display: flex; flex-direction: column; align-items: center;
-            box-shadow: 0 -15px 50px rgba(0,0,0,0.7); backdrop-filter: blur(15px);
+            position: fixed; bottom: -100%; left: 0; right: 0; height: 60vh;
+            background: #111; border-top: 2px solid #444; border-radius: 20px 20px 0 0;
+            z-index: 200; transition: 0.3s; padding: 20px; display: flex; flex-direction: column;
         }
         #full-palette-popup.open { bottom: 0; }
-        
-        #palette-grid {
-            display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px;
-            width: 100%; max-width: 600px; height: 100%; overflow-y: auto;
-            padding-right: 10px;
-        }
-        
-        .color-btn {
-            aspect-ratio: 1; border-radius: 12px; cursor: pointer;
-            border: 3px solid transparent; transition: 0.15s;
-        }
-        .color-btn:active { transform: scale(0.9); }
-        .color-btn.active { border-color: #fff; transform: scale(1.1); box-shadow: 0 0 15px rgba(255,255,255,0.5); }
-
-        #timer { color: #888; font-size: 14px; font-weight: bold; letter-spacing: 1px; }
-
-        /* Кнопка закрытия палитры */
-        #close-palette {
-            position: absolute; top: 15px; right: 15px;
-            background: rgba(255,255,255,0.1); color: #fff; border: none;
-            width: 40px; height: 40px; border-radius: 20px; font-size: 20px;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-        }
+        #palette-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; overflow-y: auto; }
+        .color-btn { aspect-ratio: 1; border-radius: 8px; border: 2px solid transparent; }
+        .color-btn.active { border-color: white; }
+        #timer { color: #aaa; font-size: 12px; font-weight: bold; width: 80px; text-align: center; }
     </style>
 </head>
 <body>
-
     <div id="top-ui">
         <div class="glass" id="coords">X: 0, Y: 0</div>
         <div class="glass">Онлайн: <span id="online-count">0</span></div>
     </div>
-
     <div id="game-container">
         <canvas id="canvas" width="1000" height="1000"></canvas>
         <div id="cursor-hint"></div>
     </div>
-    
     <div id="bottom-ui">
-        <div id="palette-toggle">🌈</div>
+        <div id="palette-toggle"></div>
         <div id="active-color-preview"></div>
-        <div id="timer">Загрузка...</div>
+        <div id="timer">...</div>
     </div>
-
     <div id="full-palette-popup">
-        <button id="close-palette">✕</button>
-        <h3 style="color:white; margin-top:0; margin-bottom:20px;">Выбери цвет (50 оттенков)</h3>
+        <h4 style="color:white; margin:0 0 15px 0">Выберите цвет</h4>
         <div id="palette-grid"></div>
+        <button onclick="document.getElementById('full-palette-popup').classList.remove('open')" style="margin-top:20px; padding:10px; background:#333; color:white; border:none; border-radius:10px;">Закрыть</button>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -121,192 +65,129 @@
         const ctx = canvas.getContext('2d');
         const cursorHint = document.getElementById('cursor-hint');
         const timerEl = document.getElementById('timer');
-        const paletteGridEl = document.getElementById('palette-grid');
-        const palettePopupEl = document.getElementById('full-palette-popup');
-        const paletteToggleEl = document.getElementById('palette-toggle');
-        const closePaletteEl = document.getElementById('close-palette');
-        const activeColorPreviewEl = document.getElementById('active-color-preview');
+        const paletteGrid = document.getElementById('palette-grid');
+        const popup = document.getElementById('full-palette-popup');
+        const activePreview = document.getElementById('active-color-preview');
 
-        // Кулдаун (оставил 3 сек, как ты просил)
-        const COOLDOWN_MS = 3000; 
-        let lastPlacedTime = 0;
+        let scale = 1, panX = 0, panY = 0, isDragging = false, startX, startY, hasMoved = false, lastDist = 0;
+        const colors = ['#000000','#ffffff','#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#ffa500','#800080','#a52a2a','#808080','#ffc0cb','#40e0d0','#000080','#ffd700','#7cfc00','#ff4500','#1e90ff','#8b4513','#006400','#4b0082','#ff1493','#00fa9a','#708090','#f0e68c','#d2691e','#800000','#556b2f','#4682b4','#9932cc','#8b0000','#e9967a','#9acd32','#20b2aa','#6a5acd','#d8bfd8','#bc8f8f','#f4a460','#bdb76b','#5f9ea0','#da70d6','#b22222','#00bfff','#32cd32','#ff69b4','#cd5c5c','#f5f5f5','#2f4f4f','#8b8b00'];
+        let selectedColor = colors[2];
 
-        // Палитра на 50 цветов (с красивыми переходами)
-        const colors50 = [
-            '#000000', '#FFFFFF', '#6d6e71', '#bcbec0', '#ee1c24', '#f15b22', '#f7941d', '#fff200', '#8dc63f', '#00a651',
-            '#00aeef', '#2e3192', '#662d91', '#ec008c', '#a0410d', '#f79ac1', '#fbc9e1', '#b7daeb', '#f6f6b0', '#c8e6b3',
-            '#FFD700', '#FF8C00', '#FF4500', '#FF0000', '#DC143C', '#B22222', '#8B0000', '#C71585', '#D2691E', '#CD853F',
-            '#F4A460', '#DEB887', '#D2B48C', '#BC8F8F', '#A52A2A', '#8B4513', '#556B2F', '#808000', '#6B8E23', '#9ACD32',
-            '#32CD32', '#3CB371', '#00FA9A', '#008080', '#00CED1', '#4682B4', '#1E90FF', '#00008B', '#191970', '#800080'
-        ];
-        let selectedColor = colors50[4]; // Дефолтный красный
-
-        // Камера
-        let scale = Math.min(window.innerWidth, window.innerHeight) / 1000;
-        let panX = (window.innerWidth - 1000 * scale) / 2;
-        let panY = (window.innerHeight - 1000 * scale) / 2;
-        let isDragging = false;
-        let startX, startY;
-        let hasMoved = false;
-        let lastTouchDist = null;
-
-        // Создание мега-палитры
-        colors50.forEach(color => {
-            const btn = document.createElement('div');
-            btn.className = 'color-btn';
-            btn.style.backgroundColor = color;
-            if(color === selectedColor) btn.classList.add('active');
-            
-            btn.onclick = () => {
-                document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                selectedColor = color;
-                activeColorPreviewEl.style.backgroundColor = color;
-                palettePopupEl.classList.remove('open'); // Закрываем при выборе
-            };
-            paletteGridEl.appendChild(btn);
+        // Рендер палитры
+        colors.forEach(c => {
+            const b = document.createElement('div');
+            b.className = 'color-btn';
+            b.style.background = c;
+            b.onclick = () => { selectedColor = c; activePreview.style.background = c; popup.classList.remove('open'); };
+            paletteGrid.appendChild(b);
         });
-        activeColorPreviewEl.style.backgroundColor = selectedColor;
-
-        // Логика открытия палитры
-        paletteToggleEl.onclick = () => palettePopupEl.classList.toggle('open');
-        closePaletteEl.onclick = () => palettePopupEl.classList.remove('open');
+        activePreview.style.background = selectedColor;
+        document.getElementById('palette-toggle').onclick = () => popup.classList.add('open');
 
         function updateTransform() {
             canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-            canvas.style.backgroundImage = scale > 15 ? 
-                `linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px), 
-                 linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px)` : 'none';
-            canvas.style.backgroundSize = "1px 1px";
+            updateUI({x: -1, y: -1}); // Скрыть прицел при движении
         }
 
-        // --- ИСПРАВЛЕННЫЙ РАСЧЕТ КООРДИНАТ ---
+        // КЛЮЧЕВАЯ ФУНКЦИЯ: Точный расчет координат
         function getCoords(clientX, clientY) {
-            // Учитываем точный сдвиг и масштаб
             const rect = canvas.getBoundingClientRect();
-            return {
-                x: Math.floor((clientX - rect.left) / scale),
-                y: Math.floor((clientY - rect.top) / scale)
-            };
+            // Вычисляем положение относительно самого холста
+            const x = Math.floor((clientX - rect.left) / (rect.width / 1000));
+            const y = Math.floor((clientY - rect.top) / (rect.height / 1000));
+            return { x, y };
         }
-
-        socket.on('userCount', (count) => { document.getElementById('online-count').textContent = count; });
-        socket.on('initBoard', (data) => {
-            data.forEach(([key, color]) => {
-                const [x, y] = key.split(',').map(Number);
-                ctx.fillStyle = color;
-                ctx.fillRect(x, y, 1, 1);
-            });
-            timerEl.textContent = "ПОЕХАЛИ!";
-        });
-        socket.on('updatePixel', (data) => {
-            ctx.fillStyle = data.color;
-            ctx.fillRect(data.x, data.y, 1, 1);
-        });
-
-        // Тач-управление
-        window.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) {
-                isDragging = true; hasMoved = false;
-                startX = e.touches[0].clientX - panX;
-                startY = e.touches[0].clientY - panY;
-            } else if (e.touches.length === 2) {
-                isDragging = false;
-                lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            }
-        }, {passive: false});
-
-        window.addEventListener('touchmove', (e) => {
-            if (palettePopupEl.classList.contains('open')) return; // Не двигаем камеру, если открыта палитра
-            e.preventDefault();
-            const cx = e.touches[0].clientX;
-            const cy = e.touches[0].clientY;
-
-            if (e.touches.length === 1 && isDragging) {
-                hasMoved = true;
-                panX = cx - startX; panY = cy - startY;
-            } else if (e.touches.length === 2) {
-                const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                const delta = dist / lastTouchDist;
-                // Зум до 800
-                const newScale = Math.max(0.1, Math.min(scale * delta, 800));
-                const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                panX = midX - (midX - panX) * (newScale / scale);
-                panY = midY - (midY - panY) * (newScale / scale);
-                scale = newScale;
-                lastTouchDist = dist;
-            }
-            updateUI(getCoords(cx, cy));
-            updateTransform();
-        }, {passive: false});
-
-        window.addEventListener('touchend', (e) => {
-            if (palettePopupEl.classList.contains('open')) return;
-            if (!hasMoved && !lastTouchDist) {
-                const touch = e.changedTouches[0];
-                placePixel(getCoords(touch.clientX, touch.clientY));
-            }
-            isDragging = false; lastTouchDist = null;
-        });
-
-        // Мышь
-        window.addEventListener('mousedown', (e) => {
-            if (e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup')) return;
-            isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY;
-        });
-        window.addEventListener('mousemove', (e) => {
-            if (palettePopupEl.classList.contains('open')) return;
-            const c = getCoords(e.clientX, e.clientY);
-            updateUI(c);
-            if (!isDragging) return;
-            hasMoved = true; panX = e.clientX - startX; panY = e.clientY - startY;
-            updateTransform();
-        });
-        window.addEventListener('mouseup', (e) => {
-            if (e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup')) return;
-            if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY));
-            isDragging = false;
-        });
-        window.addEventListener('wheel', (e) => {
-            if (palettePopupEl.classList.contains('open')) return;
-            e.preventDefault();
-            const delta = e.deltaY > 0 ? 0.8 : 1.25;
-            const newScale = Math.max(0.1, Math.min(scale * delta, 800));
-            panX = e.clientX - (e.clientX - panX) * (newScale / scale);
-            panY = e.clientY - (e.clientY - panY) * (newScale / scale);
-            scale = newScale;
-            updateTransform();
-        }, {passive: false});
 
         function updateUI(c) {
             if(c.x >= 0 && c.x < 1000 && c.y >= 0 && c.y < 1000) {
                 document.getElementById('coords').textContent = `X: ${c.x}, Y: ${c.y}`;
-                // Подсветка пикселя (прицел)
-                if(scale > 3) {
+                if(scale > 2) {
+                    const rect = canvas.getBoundingClientRect();
+                    const pixelSize = rect.width / 1000;
                     cursorHint.style.display = 'block';
-                    cursorHint.style.width = scale + 'px';
-                    cursorHint.style.height = scale + 'px';
-                    // Точное позиционирование hint
-                    cursorHint.style.left = (c.x * scale + panX) + 'px';
-                    cursorHint.style.top = (c.y * scale + panY) + 'px';
+                    cursorHint.style.width = pixelSize + 'px';
+                    cursorHint.style.height = pixelSize + 'px';
+                    cursorHint.style.left = (rect.left + c.x * pixelSize) + 'px';
+                    cursorHint.style.top = (rect.top + c.y * pixelSize) + 'px';
                 }
             } else { cursorHint.style.display = 'none'; }
         }
 
+        // Мышь и Тач
+        window.addEventListener('mousedown', (e) => {
+            if(e.target.closest('#bottom-ui')) return;
+            isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY;
+        });
+        window.addEventListener('mousemove', (e) => {
+            const c = getCoords(e.clientX, e.clientY);
+            updateUI(c);
+            if (!isDragging) return;
+            hasMoved = true; panX = e.clientX - startX; panY = e.clientY - startY; updateTransform();
+        });
+        window.addEventListener('mouseup', (e) => {
+            if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY));
+            isDragging = false;
+        });
+
+        // Тач (телефон)
+        window.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true; hasMoved = false;
+                startX = e.touches[0].clientX - panX; startY = e.touches[0].clientY - panY;
+            } else if (e.touches.length === 2) {
+                isDragging = false; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            }
+        }, {passive: false});
+
+        window.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1 && isDragging) {
+                hasMoved = true; panX = e.touches[0].clientX - startX; panY = e.touches[0].clientY - startY;
+            } else if (e.touches.length === 2) {
+                const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                const delta = dist / lastDist;
+                const newScale = Math.max(0.1, Math.min(scale * delta, 500));
+                const midX = (e.touches[0].clientX + e.touches[1].clientX)/2;
+                const midY = (e.touches[0].clientY + e.touches[1].clientY)/2;
+                panX = midX - (midX - panX) * (newScale / scale);
+                panY = midY - (midY - panY) * (newScale / scale);
+                scale = newScale; lastDist = dist;
+            }
+            updateUI(getCoords(e.touches[0].clientX, e.touches[0].clientY));
+            updateTransform();
+        }, {passive: false});
+
+        window.addEventListener('touchend', (e) => {
+            if (!hasMoved && isDragging) placePixel(getCoords(e.changedTouches[0].clientX, e.changedTouches[0].clientY));
+            isDragging = false; lastDist = 0;
+        });
+
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.8 : 1.25;
+            const newScale = Math.max(0.1, Math.min(scale * delta, 500));
+            panX = e.clientX - (e.clientX - panX) * (newScale / scale);
+            panY = e.clientY - (e.clientY - panY) * (newScale / scale);
+            scale = newScale; updateTransform();
+        }, {passive: false});
+
+        let lastTime = 0;
         function placePixel(c) {
-            if (Date.now() - lastPlacedTime < COOLDOWN_MS) return;
-            if (c.x < 0 || c.x >= 1000 || c.y < 0 || c.y >= 1000) return;
+            if (Date.now() - lastTime < 3000 || c.x < 0 || c.x >= 1000) return;
             ctx.fillStyle = selectedColor;
             ctx.fillRect(c.x, c.y, 1, 1);
             socket.emit('drawPixel', { x: c.x, y: c.y, color: selectedColor });
-            lastPlacedTime = Date.now();
+            lastTime = Date.now();
         }
 
+        socket.on('initBoard', (data) => data.forEach(([k, c]) => { const [x,y]=k.split(','); ctx.fillStyle=c; ctx.fillRect(x,y,1,1); }));
+        socket.on('updatePixel', (d) => { ctx.fillStyle=d.color; ctx.fillRect(d.x, d.y, 1, 1); });
+        socket.on('userCount', (n) => document.getElementById('online-count').textContent = n);
+
         setInterval(() => {
-            const diff = Date.now() - lastPlacedTime;
-            if (diff >= COOLDOWN_MS) { timerEl.textContent = "МОЖНО!"; timerEl.style.color = "#4ade80"; }
-            else { timerEl.textContent = `ЖДИ: ${Math.ceil((COOLDOWN_MS - diff)/1000)}с`; timerEl.style.color = "#f87171"; }
+            const rem = Math.ceil((3000 - (Date.now() - lastTime))/1000);
+            timerEl.textContent = rem > 0 ? `Жди: ${rem}с` : "ГОТОВ";
+            timerEl.style.color = rem > 0 ? "#ff4444" : "#44ff44";
         }, 100);
 
         updateTransform();
