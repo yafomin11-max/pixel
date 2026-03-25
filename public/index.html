@@ -7,35 +7,24 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #121212; font-family: sans-serif; touch-action: none; user-select: none; }
         #game-container { width: 100vw; height: 100vh; position: relative; overflow: hidden; background: #000; }
-        #canvas {
-            position: absolute; top: 0; left: 0;
-            image-rendering: pixelated; background-color: white;
-            transform-origin: 0 0; 
-        }
-        #cursor-hint {
-            position: absolute; pointer-events: none;
-            border: 2px solid #fff; box-sizing: border-box; display: none; z-index: 5;
-            box-shadow: 0 0 4px #000;
-        }
+        #canvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; background-color: white; transform-origin: 0 0; }
+        #cursor-hint { position: absolute; pointer-events: none; border: 2px solid #fff; box-sizing: border-box; display: none; z-index: 5; box-shadow: 0 0 4px #000; }
+        
         #top-ui { position: fixed; top: 15px; left: 15px; right: 15px; display: flex; justify-content: space-between; pointer-events: none; z-index: 100; }
-        .glass { background: rgba(0, 0, 0, 0.8); color: white; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 12px; border: 1px solid #333; }
-        #bottom-ui {
-            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: #1a1a1a; padding: 10px 20px; border-radius: 40px;
-            display: flex; align-items: center; gap: 12px; z-index: 100; border: 1px solid #444;
-        }
+        .glass { background: rgba(0, 0, 0, 0.8); color: white; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 12px; border: 1px solid #333; pointer-events: auto; }
+        
+        #bottom-ui { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a1a; padding: 10px 20px; border-radius: 40px; display: flex; align-items: center; gap: 12px; z-index: 100; border: 1px solid #444; }
         #palette-toggle { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(45deg, red, orange, yellow, green, blue, purple); border: 2px solid white; cursor: pointer; }
         #active-color-preview { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #555; }
-        #full-palette-popup {
-            position: fixed; bottom: -100%; left: 0; right: 0; height: 60vh;
-            background: #111; border-top: 2px solid #444; border-radius: 20px 20px 0 0;
-            z-index: 200; transition: 0.3s; padding: 20px; display: flex; flex-direction: column;
-        }
-        #full-palette-popup.open { bottom: 0; }
-        #palette-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; overflow-y: auto; }
-        .color-btn { aspect-ratio: 1; border-radius: 8px; border: 2px solid transparent; }
-        .color-btn.active { border-color: white; }
         #timer { color: #aaa; font-size: 12px; font-weight: bold; width: 80px; text-align: center; }
+
+        #full-palette-popup { position: fixed; bottom: -100%; left: 0; right: 0; height: 65vh; background: #111; border-top: 2px solid #444; border-radius: 20px 20px 0 0; z-index: 200; transition: 0.3s; padding: 20px; display: flex; flex-direction: column; }
+        #full-palette-popup.open { bottom: 0; }
+        
+        /* Сетка теперь умная, вместит хоть 500 цветов */
+        #palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(35px, 1fr)); gap: 8px; overflow-y: auto; padding-bottom: 20px; }
+        .color-btn { aspect-ratio: 1; border-radius: 6px; border: 2px solid transparent; cursor: pointer; }
+        .color-btn.active { border-color: white; transform: scale(1.1); box-shadow: 0 0 10px rgba(255,255,255,0.5); }
     </style>
 </head>
 <body>
@@ -53,9 +42,11 @@
         <div id="timer">...</div>
     </div>
     <div id="full-palette-popup">
-        <h4 style="color:white; margin:0 0 15px 0">Выберите цвет</h4>
+        <h4 style="color:white; margin:0 0 15px 0; display:flex; justify-content:space-between;">
+            Выбери цвет (150 шт)
+            <span id="close-btn" style="color:red; cursor:pointer; font-size:20px;">✕</span>
+        </h4>
         <div id="palette-grid"></div>
-        <button onclick="document.getElementById('full-palette-popup').classList.remove('open')" style="margin-top:20px; padding:10px; background:#333; color:white; border:none; border-radius:10px;">Закрыть</button>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -69,30 +60,58 @@
         const popup = document.getElementById('full-palette-popup');
         const activePreview = document.getElementById('active-color-preview');
 
+        // --- РЕЖИМ АДМИНА ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const adminKey = urlParams.get('admin'); 
+        const isActuallyAdmin = adminKey === 'supertop'; // Твой секретный пароль
+
         let scale = 1, panX = 0, panY = 0, isDragging = false, startX, startY, hasMoved = false, lastDist = 0;
-        const colors = ['#000000','#ffffff','#ff0000','#00ff00','#0000ff','#ffff00','#ff00ff','#00ffff','#ffa500','#800080','#a52a2a','#808080','#ffc0cb','#40e0d0','#000080','#ffd700','#7cfc00','#ff4500','#1e90ff','#8b4513','#006400','#4b0082','#ff1493','#00fa9a','#708090','#f0e68c','#d2691e','#800000','#556b2f','#4682b4','#9932cc','#8b0000','#e9967a','#9acd32','#20b2aa','#6a5acd','#d8bfd8','#bc8f8f','#f4a460','#bdb76b','#5f9ea0','#da70d6','#b22222','#00bfff','#32cd32','#ff69b4','#cd5c5c','#f5f5f5','#2f4f4f','#8b8b00'];
-        let selectedColor = colors[2];
+        
+        // 150 ЦВЕТОВ!
+        const colors = [
+            '#000000', '#111111', '#222222', '#333333', '#444444', '#555555', '#666666', '#777777', '#888888', '#999999', '#AAAAAA', '#CCCCCC', '#EEEEEE', '#FFFFFF',
+            '#4c0000', '#660000', '#800000', '#990000', '#b30000', '#cc0000', '#e60000', '#ff0000', '#ff1a1a', '#ff3333', '#ff4d4d', '#ff6666', '#ff8080', '#ff9999',
+            '#4c2600', '#663300', '#804000', '#994d00', '#b35900', '#cc6600', '#e67300', '#ff8000', '#ff8c1a', '#ff9933', '#ffa64d', '#ffb366', '#ffbf80', '#ffcc99',
+            '#4c4c00', '#666600', '#808000', '#999900', '#b3b300', '#cccc00', '#e6e600', '#ffff00', '#ffff1a', '#ffff33', '#ffff4d', '#ffff66', '#ffff80', '#ffff99',
+            '#004c00', '#006600', '#008000', '#009900', '#00b300', '#00cc00', '#00e600', '#00ff00', '#1aff1a', '#33ff33', '#4dff4d', '#66ff66', '#80ff80', '#99ff99',
+            '#004c4c', '#006666', '#008080', '#009999', '#00b3b3', '#00cccc', '#00e6e6', '#00ffff', '#1affff', '#33ffff', '#4dffff', '#66ffff', '#80ffff', '#99ffff',
+            '#00004c', '#000066', '#000080', '#000099', '#0000b3', '#0000cc', '#0000e6', '#0000ff', '#1a1aff', '#3333ff', '#4d4dff', '#6666ff', '#8080ff', '#9999ff',
+            '#26004c', '#330066', '#400080', '#4d0099', '#5900b3', '#6600cc', '#7300e6', '#8000ff', '#8c1aff', '#9933ff', '#a64dff', '#b366ff', '#bf80ff', '#cc99ff',
+            '#4c004c', '#660066', '#800080', '#990099', '#b300b3', '#cc00cc', '#e600e6', '#ff00ff', '#ff1aff', '#ff33ff', '#ff4dff', '#ff66ff', '#ff80ff', '#ff99ff',
+            '#4c0026', '#660033', '#800040', '#99004d', '#b30059', '#cc0066', '#e60073', '#ff0080', '#ff1a8c', '#ff3399', '#ff4da6', '#ff66b3', '#ff80bf', '#ff99cc',
+            // Оттенки кожи и дерева
+            '#ffdfc4', '#f0d5bc', '#e2b999', '#c58c61', '#8d5524', '#c68642', '#e0ac69', '#f1c27d', '#ffdbac', '#5c3a21'
+        ];
+        let selectedColor = '#ff0000'; // По умолчанию красный
 
         // Рендер палитры
         colors.forEach(c => {
             const b = document.createElement('div');
             b.className = 'color-btn';
             b.style.background = c;
-            b.onclick = () => { selectedColor = c; activePreview.style.background = c; popup.classList.remove('open'); };
+            if(c === selectedColor) b.classList.add('active');
+            b.onclick = () => { 
+                document.querySelectorAll('.color-btn').forEach(el => el.classList.remove('active'));
+                b.classList.add('active');
+                selectedColor = c; 
+                activePreview.style.background = c; 
+                popup.classList.remove('open'); 
+            };
             paletteGrid.appendChild(b);
         });
         activePreview.style.background = selectedColor;
+
+        // Открытие и закрытие палитры
         document.getElementById('palette-toggle').onclick = () => popup.classList.add('open');
+        document.getElementById('close-btn').onclick = () => popup.classList.remove('open');
 
         function updateTransform() {
             canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-            updateUI({x: -1, y: -1}); // Скрыть прицел при движении
+            updateUI({x: -1, y: -1});
         }
 
-        // КЛЮЧЕВАЯ ФУНКЦИЯ: Точный расчет координат
         function getCoords(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
-            // Вычисляем положение относительно самого холста
             const x = Math.floor((clientX - rect.left) / (rect.width / 1000));
             const y = Math.floor((clientY - rect.top) / (rect.height / 1000));
             return { x, y };
@@ -113,9 +132,15 @@
             } else { cursorHint.style.display = 'none'; }
         }
 
-        // Мышь и Тач
+        // --- ВОТ ОН, ФИКС БАГА ---
+        // Функция проверяет, кликнули ли мы по интерфейсу
+        function isUI(e) {
+            return e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup') || e.target.closest('#top-ui');
+        }
+
+        // Мышь
         window.addEventListener('mousedown', (e) => {
-            if(e.target.closest('#bottom-ui')) return;
+            if(isUI(e)) return; // Если клик по меню - игнорируем!
             isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY;
         });
         window.addEventListener('mousemove', (e) => {
@@ -125,12 +150,14 @@
             hasMoved = true; panX = e.clientX - startX; panY = e.clientY - startY; updateTransform();
         });
         window.addEventListener('mouseup', (e) => {
+            if(isUI(e)) return; // Если отпустили на меню - игнорируем!
             if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY));
             isDragging = false;
         });
 
         // Тач (телефон)
         window.addEventListener('touchstart', (e) => {
+            if(isUI(e)) return; // Игнорируем нажатия на меню!
             if (e.touches.length === 1) {
                 isDragging = true; hasMoved = false;
                 startX = e.touches[0].clientX - panX; startY = e.touches[0].clientY - panY;
@@ -140,6 +167,7 @@
         }, {passive: false});
 
         window.addEventListener('touchmove', (e) => {
+            if(isUI(e)) return;
             e.preventDefault();
             if (e.touches.length === 1 && isDragging) {
                 hasMoved = true; panX = e.touches[0].clientX - startX; panY = e.touches[0].clientY - startY;
@@ -158,11 +186,13 @@
         }, {passive: false});
 
         window.addEventListener('touchend', (e) => {
+            if(isUI(e)) return; // Запрещаем рисовать, если палец отпустили над меню!
             if (!hasMoved && isDragging) placePixel(getCoords(e.changedTouches[0].clientX, e.changedTouches[0].clientY));
             isDragging = false; lastDist = 0;
         });
 
         window.addEventListener('wheel', (e) => {
+            if(isUI(e)) return;
             e.preventDefault();
             const delta = e.deltaY > 0 ? 0.8 : 1.25;
             const newScale = Math.max(0.1, Math.min(scale * delta, 500));
@@ -171,20 +201,34 @@
             scale = newScale; updateTransform();
         }, {passive: false});
 
+        // Отправка пикселя (С проверкой Админа!)
         let lastTime = 0;
         function placePixel(c) {
-            if (Date.now() - lastTime < 3000 || c.x < 0 || c.x >= 1000) return;
+            const now = Date.now();
+            
+            // Если НЕ админ, то ждем 3 секунды
+            if (!isActuallyAdmin && (now - lastTime < 3000)) return; 
+            if (c.x < 0 || c.x >= 1000 || c.y < 0 || c.y >= 1000) return;
+
             ctx.fillStyle = selectedColor;
             ctx.fillRect(c.x, c.y, 1, 1);
-            socket.emit('drawPixel', { x: c.x, y: c.y, color: selectedColor });
-            lastTime = Date.now();
+            
+            // Отправляем на сервер координаты + админский ключ
+            socket.emit('drawPixel', { x: c.x, y: c.y, color: selectedColor, adminKey: adminKey });
+            lastTime = now;
         }
 
         socket.on('initBoard', (data) => data.forEach(([k, c]) => { const [x,y]=k.split(','); ctx.fillStyle=c; ctx.fillRect(x,y,1,1); }));
         socket.on('updatePixel', (d) => { ctx.fillStyle=d.color; ctx.fillRect(d.x, d.y, 1, 1); });
         socket.on('userCount', (n) => document.getElementById('online-count').textContent = n);
 
+        // Таймер (Если ты админ, показывает "ADMIN")
         setInterval(() => {
+            if (isActuallyAdmin) {
+                timerEl.textContent = "АДМИН";
+                timerEl.style.color = "#00ffff";
+                return;
+            }
             const rem = Math.ceil((3000 - (Date.now() - lastTime))/1000);
             timerEl.textContent = rem > 0 ? `Жди: ${rem}с` : "ГОТОВ";
             timerEl.style.color = rem > 0 ? "#ff4444" : "#44ff44";
