@@ -7,88 +7,98 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Раздаем статические файлы из папки public
-app.use(express.static('public'));
-
-// Настройка подключения к PostgreSQL
+// --- НАСТРОЙКА БАЗЫ ДАННЫХ ---
 const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { 
-        rejectUnauthorized: false // ОБЯЗАТЕЛЬНО для Render
-    }
+    connectionString: process.env.DATABASE_URL, // Render сам подставит эту переменную
+    ssl: { rejectUnauthorized: false }
 });
 
-// Подключаемся к базе данных
 client.connect()
-    .then(async () => {
-        console.log('✅ УСПЕХ: Подключено к базе данных PostgreSQL!');
-        
-        // Создаем таблицу для пикселей, если её еще нет
-        try {
-            await client.query(`
-                CREATE TABLE IF NOT EXISTS pixels (
-                    pos_key TEXT PRIMARY KEY,
-                    color TEXT
-                )
-            `);
-            console.log('--- Таблица pixels проверена и готова к работе ---');
-        } catch (err) {
-            console.error('❌ Ошибка при создании таблицы:', err.message);
-        }
-    })
-    .catch(err => {
-        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА ПОДКЛЮЧЕНИЯ К БД:', err.message);
-        console.log('Проверь переменную DATABASE_URL в настройках Environment на Render!');
-    });
+    .then(() => console.log('✅ Успешное подключение к Postgres'))
+    .catch(err => console.error('❌ Ошибка подключения к БД:', err.stack));
 
-let onlineUsers = 0;
+// Создаем таблицу, если её нет
+client.query(`
+    CREATE TABLE IF NOT EXISTS pixels (
+        pos_key TEXT PRIMARY KEY,
+        color TEXT NOT NULL
+    )
+`).catch(err => console.error('Ошибка создания таблицы:', err));
+
+app.use(express.static('public'));
+
+let userCount = 0;
 
 io.on('connection', async (socket) => {
-    onlineUsers++;
-    io.emit('userCount', onlineUsers);
-    console.log(`Новое подключение. Игроков онлайн: ${onlineUsers}`);
+    userCount++;
+    io.emit('userCount', userCount);
 
-    // При входе отправляем игроку все сохраненные пиксели из базы
+    // 1. Отправляем все пиксели при входе
     try {
-        const res = await client.query("SELECT pos_key, color FROM pixels");
-        const boardData = res.rows.map(row => [row.pos_key, row.color]);
-        socket.emit('initBoard', boardData);
+        const res = await client.query('SELECT pos_key, color FROM pixels');
+        const board = res.rows.map(row => [row.pos_key, row.color]);
+        socket.emit('initBoard', board);
     } catch (err) {
-        console.error('Ошибка при загрузке холста:', err.message);
+        console.error('Ошибка загрузки доски:', err);
     }
 
-    // Когда игрок ставит пиксель
+    // 2. Обработка рисования (с проверкой АДМИНА)
     socket.on('drawPixel', async (data) => {
-        // Проверка границ 1000x1000
-        if (data.x < 0 || data.x >= 1000 || data.y < 0 || data.y >= 1000) return;
-
-        const key = `${data.x},${data.y}`;
+        const { x, y, color, adminKey } = data;
         
-        try {
-            // Сохраняем или обновляем пиксель в базе данных
-            await client.query(`
-                INSERT INTO pixels(pos_key, color) 
-                VALUES($1, $2) 
-                ON CONFLICT(pos_key) DO UPDATE SET color = $2
-            `, [key, data.color]);
+        // Валидация координат
+        if (x < 0 || x >= 1000 || y < 0 || y >= 1000) return;
 
-            // Рассылаем всем остальным игрокам обновленный пиксель
-            socket.broadcast.emit('updatePixel', data);
+        // --- ПРОВЕРКА АДМИНА ---
+        const isAdmin = adminKey === 'supertop'; // Твой секретный пароль
+        const cooldown = isAdmin ? 0 : 3000; 
+
+        const now = Date.now();
+        const lastDraw = socket.lastDrawTime || 0;
+
+        // Если не админ и время не вышло — игнорируем
+        if (!isAdmin && (now - lastDraw < cooldown)) return;
+
+        socket.lastDrawTime = now;
+
+        // Сохраняем в базу данных
+        const key = `${x},${y}`;
+        try {
+            await client.query(`
+                INSERT INTO pixels (pos_key, color) 
+                VALUES ($1, $2) 
+                ON CONFLICT (pos_key) 
+                DO UPDATE SET color = $2
+            `, [key, color]);
+            
+            // Рассылаем всем остальным
+            socket.broadcast.emit('updatePixel', { x, y, color });
         } catch (err) {
-            console.error('Ошибка при сохранении пикселя:', err.message);
+            console.error('Ошибка сохранения пикселя:', err);
         }
+    });
+
+    // 3. Обработка сообщений ЧАТА
+    socket.on('sendMessage', (data) => {
+        if (!data.text || data.text.trim() === '') return;
+        
+        // Ограничиваем длину сообщения и чистим от пробелов
+        const cleanText = data.text.trim().substring(0, 100);
+        
+        // Рассылаем всем (включая отправителя)
+        io.emit('receiveMessage', {
+            id: socket.id,
+            text: cleanText
+        });
     });
 
     socket.on('disconnect', () => {
-        onlineUsers--;
-        io.emit('userCount', onlineUsers);
-        console.log(`Игрок ушел. Осталось: ${onlineUsers}`);
+        userCount--;
+        io.emit('userCount', userCount);
     });
 });
 
-// Запуск сервера на порту 10000 (стандарт Render)
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 СЕРВЕР ЗАПУЩЕН НА ПОРТУ ${PORT}`);
-    console.log(`Размер поля: 1000x1000`);
+    console.log(`🚀 Сервер запущен на порту ${PORT}`);
 });
