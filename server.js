@@ -9,7 +9,7 @@ const io = new Server(server);
 
 // --- НАСТРОЙКА БАЗЫ ДАННЫХ ---
 const client = new Client({
-    connectionString: process.env.DATABASE_URL, // Render сам подставит эту переменную
+    connectionString: process.env.DATABASE_URL, 
     ssl: { rejectUnauthorized: false }
 });
 
@@ -17,40 +17,81 @@ client.connect()
     .then(() => console.log('✅ Успешное подключение к Postgres'))
     .catch(err => console.error('❌ Ошибка подключения к БД:', err.stack));
 
-// Создаем таблицу пикселей, если её нет (ДОБАВЛЕНО: колонка username)
-client.query(`
-    CREATE TABLE IF NOT EXISTS pixels (
-        pos_key TEXT PRIMARY KEY,
-        color TEXT NOT NULL,
-        username TEXT DEFAULT 'Аноним'
-    )
-`).catch(err => console.error('Ошибка создания таблицы pixels:', err));
+// Кэш приватов в памяти для быстрой проверки
+let protectedZones = [];
 
-// ДОБАВЛЕНО: Обновляем старую таблицу, если в ней еще нет колонки username
-client.query(`
-    ALTER TABLE pixels ADD COLUMN IF NOT EXISTS username TEXT DEFAULT 'Аноним'
-`).catch(err => console.error('Ошибка обновления таблицы pixels:', err));
+async function loadZones() {
+    try {
+        const res = await client.query('SELECT * FROM protected_zones');
+        protectedZones = res.rows;
+    } catch (e) { console.error('Ошибка загрузки приватов:', e); }
+}
 
-// ДОБАВЛЕНО: Создаем таблицу пользователей
-client.query(`
-    CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY,
-        password TEXT NOT NULL
-    )
-`).catch(err => console.error('Ошибка создания таблицы users:', err));
+// 1. Инициализация таблиц
+async function initDB() {
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS pixels (
+                pos_key TEXT PRIMARY KEY,
+                color TEXT NOT NULL,
+                username TEXT DEFAULT 'Аноним'
+            )
+        `);
+        await client.query(`ALTER TABLE pixels ADD COLUMN IF NOT EXISTS username TEXT DEFAULT 'Аноним'`).catch(()=>Object);
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password TEXT NOT NULL
+            )
+        `);
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS banned_users (
+                username TEXT PRIMARY KEY,
+                reason TEXT
+            )
+        `);
+
+        // ДОБАВЛЕНО: Таблица для приватов
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS protected_zones (
+                id SERIAL PRIMARY KEY,
+                x1 INTEGER,
+                y1 INTEGER,
+                x2 INTEGER,
+                y2 INTEGER
+            )
+        `);
+        
+        await loadZones(); // Загружаем приваты при старте сервера
+        console.log('✅ Все таблицы базы данных готовы');
+    } catch (err) {
+        console.error('❌ Ошибка при инициализации БД:', err);
+    }
+}
+initDB();
 
 app.use(express.static('public'));
 
 let userCount = 0;
 
+// Хелпер для проверки бана
+async function checkBan(username) {
+    if (!username || username === 'Аноним') return false;
+    const res = await client.query('SELECT username FROM banned_users WHERE username = $1', [username]);
+    return res.rows.length > 0;
+}
+
 io.on('connection', async (socket) => {
     userCount++;
     io.emit('userCount', userCount);
     
-    // По умолчанию пользователь Аноним, пока не войдет
     socket.username = 'Аноним';
 
-    // 1. Отправляем все пиксели при входе
+    const isAdminConnection = socket.handshake.headers.referer && socket.handshake.headers.referer.includes('admin=supertop');
+
+    // 1. Отправка доски
     try {
         const res = await client.query('SELECT pos_key, color FROM pixels');
         const board = res.rows.map(row => [row.pos_key, row.color]);
@@ -59,20 +100,21 @@ io.on('connection', async (socket) => {
         console.error('Ошибка загрузки доски:', err);
     }
 
-    // ДОБАВЛЕНО: Регистрация
+    // 2. РЕГИСТРАЦИЯ И ВХОД
     socket.on('register', async (data) => {
         const { username, password } = data;
-        if (!username || !password || username.length > 15) return socket.emit('authResult', { success: false, msg: 'Некорректные данные' });
+        if (!username || !password || username.length > 15 || username === 'Аноним') {
+            return socket.emit('authResult', { success: false, msg: 'Недопустимое имя!' });
+        }
         try {
             await client.query('INSERT INTO users (username, password) VALUES ($1, $2)', [username, password]);
             socket.username = username;
             socket.emit('authResult', { success: true, username });
         } catch (err) {
-            socket.emit('authResult', { success: false, msg: 'Это имя уже занято!' });
+            socket.emit('authResult', { success: false, msg: 'Имя уже занято!' });
         }
     });
 
-    // ДОБАВЛЕНО: Вход
     socket.on('login', async (data) => {
         const { username, password } = data;
         try {
@@ -81,14 +123,12 @@ io.on('connection', async (socket) => {
                 socket.username = username;
                 socket.emit('authResult', { success: true, username });
             } else {
-                socket.emit('authResult', { success: false, msg: 'Неверный логин или пароль!' });
+                socket.emit('authResult', { success: false, msg: 'Неверные данные!' });
             }
-        } catch (err) {
-            console.error(err);
-        }
+        } catch (err) { console.error(err); }
     });
 
-    // ДОБАВЛЕНО: Узнать автора пикселя
+    // 3. ИНСПЕКТОР (КТО ПОСТАВИЛ БЛОК)
     socket.on('inspectPixel', async (data) => {
         const { x, y } = data;
         const key = `${x},${y}`;
@@ -96,32 +136,45 @@ io.on('connection', async (socket) => {
             const res = await client.query('SELECT username FROM pixels WHERE pos_key = $1', [key]);
             const author = res.rows.length > 0 ? res.rows[0].username : 'Пусто';
             socket.emit('pixelInfo', { x, y, author });
-        } catch (err) {
-            console.error(err);
-        }
+        } catch (err) { console.error(err); }
     });
 
-    // 2. Обработка рисования (с проверкой АДМИНА)
+    // 4. РИСОВАНИЕ
     socket.on('drawPixel', async (data) => {
         const { x, y, color, adminKey } = data;
+        const isAdmin = adminKey === 'supertop';
+
+        if (await checkBan(socket.username) && !isAdmin) {
+            return socket.emit('receiveMessage', { username: 'СИСТЕМА', text: 'Вы забанены и не можете рисовать!' });
+        }
+
+        if (socket.username === 'Аноним' && !isAdmin) {
+            return socket.emit('receiveMessage', { username: 'СИСТЕМА', text: 'Войдите в аккаунт, чтобы рисовать!' });
+        }
         
-        // ИЗМЕНЕНО: Валидация координат до 2000
         if (x < 0 || x >= 2000 || y < 0 || y >= 2000) return;
 
-        // --- ПРОВЕРКА АДМИНА ---
-        const isAdmin = adminKey === 'supertop'; // Твой секретный пароль
+        // ДОБАВЛЕНО: ПРОВЕРКА НА ПРИВАТ ТЕРРИТОРИИ
+        if (!isAdmin) {
+            // Проверяем, попадает ли точка (x, y) хотя бы в одну защищенную зону
+            const isProtected = protectedZones.some(z => 
+                x >= Math.min(z.x1, z.x2) && x <= Math.max(z.x1, z.x2) &&
+                y >= Math.min(z.y1, z.y2) && y <= Math.max(z.y1, z.y2)
+            );
+            
+            if (isProtected) {
+                // Тихо игнорируем попытку нарисовать, чтобы не спамить в чат
+                return;
+            }
+        }
+
         const cooldown = isAdmin ? 0 : 3000; 
-
         const now = Date.now();
-        const lastDraw = socket.lastDrawTime || 0;
-
-        // Если не админ и время не вышло — игнорируем
-        if (!isAdmin && (now - lastDraw < cooldown)) return;
+        if (!isAdmin && (now - (socket.lastDrawTime || 0) < cooldown)) return;
 
         socket.lastDrawTime = now;
-
-        // Сохраняем в базу данных (ДОБАВЛЕНО: сохраняем username)
         const key = `${x},${y}`;
+
         try {
             await client.query(`
                 INSERT INTO pixels (pos_key, color, username) 
@@ -130,21 +183,53 @@ io.on('connection', async (socket) => {
                 DO UPDATE SET color = $2, username = $3
             `, [key, color, socket.username]);
             
-            // Рассылаем всем остальным
             socket.broadcast.emit('updatePixel', { x, y, color });
-        } catch (err) {
-            console.error('Ошибка сохранения пикселя:', err);
-        }
+        } catch (err) { console.error('Ошибка сохранения пикселя:', err); }
     });
 
-    // 3. Обработка сообщений ЧАТА
-    socket.on('sendMessage', (data) => {
+    // 5. ЧАТ И БАН-КОМАНДЫ + КОМАНДЫ ПРИВАТА
+    socket.on('sendMessage', async (data) => {
         if (!data.text || data.text.trim() === '') return;
         
-        // Ограничиваем длину сообщения и чистим от пробелов
+        // Команды только для админа
+        if (isAdminConnection) {
+            const text = data.text.trim();
+            
+            // Бан
+            if (text.startsWith('/ban ')) {
+                const targetName = text.split(' ')[1];
+                if (targetName && targetName !== 'Аноним') {
+                    await client.query('INSERT INTO banned_users (username) VALUES ($1) ON CONFLICT DO NOTHING', [targetName]);
+                    return io.emit('receiveMessage', { username: 'СИСТЕМА', text: `Пользователь ${targetName} заблокирован!` });
+                }
+            }
+
+            // Создание привата
+            if (text.startsWith('/protect ')) {
+                // Ожидаем формат: /protect x1 y1 x2 y2
+                const parts = text.split(' ');
+                if (parts.length === 5) {
+                    const x1 = parseInt(parts[1]), y1 = parseInt(parts[2]), x2 = parseInt(parts[3]), y2 = parseInt(parts[4]);
+                    if (!isNaN(x1) && !isNaN(y1) && !isNaN(x2) && !isNaN(y2)) {
+                        await client.query('INSERT INTO protected_zones (x1, y1, x2, y2) VALUES ($1, $2, $3, $4)', [x1, y1, x2, y2]);
+                        await loadZones(); // Обновляем кэш приватов
+                        return io.emit('receiveMessage', { username: 'СИСТЕМА', text: `Территория (${x1},${y1}) - (${x2},${y2}) успешно защищена!` });
+                    }
+                }
+                return socket.emit('receiveMessage', { username: 'СИСТЕМА', text: 'Ошибка! Используй: /protect X1 Y1 X2 Y2' });
+            }
+
+            // Снятие всех приватов (глобальная очистка)
+            if (text === '/unprotectall') {
+                await client.query('TRUNCATE TABLE protected_zones');
+                await loadZones();
+                return io.emit('receiveMessage', { username: 'СИСТЕМА', text: 'Все приваты удалены!' });
+            }
+        }
+
+        if (await checkBan(socket.username)) return;
+
         const cleanText = data.text.trim().substring(0, 100);
-        
-        // ИЗМЕНЕНО: Рассылаем всем с настоящим именем пользователя
         io.emit('receiveMessage', {
             username: socket.username,
             text: cleanText
@@ -159,5 +244,5 @@ io.on('connection', async (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+    console.log(`🚀 Сервер Pixel Battle PRO запущен на порту ${PORT}`);
 });
