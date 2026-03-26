@@ -17,6 +17,7 @@
         .icon-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid #333; display: flex; align-items: center; justify-content: center; font-size: 16px; color: white; cursor: pointer; }
         #palette-toggle { background: linear-gradient(45deg, red, orange, yellow, green, blue, purple); border: 2px solid white; }
         #eyedropper-toggle.active { background: cyan; box-shadow: 0 0 10px cyan; }
+        #inspector-toggle.active { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; } /* ДОБАВЛЕНО */
         #active-color-preview { width: 22px; height: 22px; border-radius: 5px; border: 1px solid #555; }
         #timer { color: #aaa; font-size: 10px; font-weight: bold; width: 60px; text-align: center; }
 
@@ -28,21 +29,43 @@
 
         /* ЧАТ */
         #chat-container { position: fixed; left: 15px; bottom: 80px; width: 200px; max-height: 150px; overflow: hidden; pointer-events: none; z-index: 90; display: flex; flex-direction: column-reverse; gap: 4px; }
-        .chat-msg { background: rgba(0, 0, 0, 0.7); color: white; padding: 6px 10px; border-radius: 8px; font-size: 11px; animation: fadeMessage 5s forwards; max-width: 90%; word-wrap: break-word; }
+        .chat-msg { background: rgba(0, 0, 0, 0.8); color: white; padding: 6px 10px; border-radius: 8px; font-size: 12px; animation: fadeMessage 8s forwards; max-width: 90%; word-wrap: break-word; }
+        .chat-username { font-weight: bold; color: #ffaa00; margin-right: 4px; }
         #chat-input-container { display: none; margin-left: auto; pointer-events: auto; gap: 4px; align-items: center; }
         #chat-input-container.open { display: flex; }
         #chat-input { background: rgba(255,255,255,0.1); color: white; border: 1px solid #444; padding: 6px; border-radius: 8px; font-size: 12px; outline: none; width: 100px; }
         @keyframes fadeMessage { 0% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-10px); } }
+
+        /* ДОБАВЛЕНО: ОКНО АВТОРИЗАЦИИ */
+        #auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; justify-content: center; align-items: center; flex-direction: column; color: white; }
+        .auth-box { background: #1a1a1a; padding: 25px; border-radius: 15px; border: 1px solid #444; text-align: center; width: 280px; }
+        .auth-input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 8px; border: none; background: #333; color: white; outline: none; }
+        .auth-btn { width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; }
+        #login-btn { background: #00cc66; color: white; }
+        #reg-btn { background: #444; color: white; margin-top: 10px; }
+        #auth-error { color: #ff4444; font-size: 12px; margin-top: 10px; min-height: 15px; }
     </style>
 </head>
 <body>
+    <div id="auth-overlay">
+        <div class="auth-box">
+            <h2>Вход в игру</h2>
+            <input type="text" id="auth-login" class="auth-input" placeholder="Логин (до 15 симв.)" maxlength="15">
+            <input type="password" id="auth-pass" class="auth-input" placeholder="Пароль">
+            <button id="login-btn" class="auth-btn">Войти</button>
+            <button id="reg-btn" class="auth-btn">Зарегистрироваться</button>
+            <div id="auth-error"></div>
+            <p style="font-size: 11px; color: #888; margin-top: 15px; cursor: pointer;" onclick="document.getElementById('auth-overlay').style.display='none'">Играть как Аноним</p>
+        </div>
+    </div>
+
     <div id="top-ui">
-        <div class="glass" id="coords">X: 0, Y: 0</div>
+        <div class="glass" id="coords">X: 0, Y: 0 <span id="author-info" style="color:#ffaa00; margin-left:10px;"></span></div>
         <div class="glass">Онлайн: <span id="online-count">0</span></div>
     </div>
     
     <div id="game-container">
-        <canvas id="canvas" width="1000" height="1000"></canvas>
+        <canvas id="canvas" width="2000" height="2000"></canvas>
         <div id="cursor-hint"></div>
     </div>
 
@@ -51,7 +74,7 @@
     <div id="bottom-ui">
         <div id="palette-toggle" class="icon-btn"></div>
         <div id="eyedropper-toggle" class="icon-btn">🧪</div>
-        <div id="chat-toggle" class="icon-btn">💬</div>
+        <div id="inspector-toggle" class="icon-btn" title="Узнать автора">🔍</div> <div id="chat-toggle" class="icon-btn">💬</div>
         
         <div id="chat-input-container">
             <input type="text" id="chat-input" placeholder="Чат..." maxlength="100">
@@ -79,6 +102,7 @@
         const popup = document.getElementById('full-palette-popup');
         const activePreview = document.getElementById('active-color-preview');
         const eyedropperToggle = document.getElementById('eyedropper-toggle');
+        const inspectorToggle = document.getElementById('inspector-toggle'); // ДОБАВЛЕНО
         const chatContainer = document.getElementById('chat-container');
         const chatInputContainer = document.getElementById('chat-input-container');
         const chatInput = document.getElementById('chat-input');
@@ -90,10 +114,31 @@
 
         let scale = 1, panX = 0, panY = 0, isDragging = false, startX, startY, hasMoved = false, lastDist = 0;
         let isEyedropperMode = false;
+        let isInspectorMode = false; // ДОБАВЛЕНО
+        let myUsername = "Аноним"; // ДОБАВЛЕНО
+
+        // --- АВТОРИЗАЦИЯ (ДОБАВЛЕНО) ---
+        document.getElementById('login-btn').onclick = () => {
+            const u = document.getElementById('auth-login').value.trim();
+            const p = document.getElementById('auth-pass').value.trim();
+            if(u && p) socket.emit('login', {username: u, password: p});
+        };
+        document.getElementById('reg-btn').onclick = () => {
+            const u = document.getElementById('auth-login').value.trim();
+            const p = document.getElementById('auth-pass').value.trim();
+            if(u && p) socket.emit('register', {username: u, password: p});
+        };
+        socket.on('authResult', (data) => {
+            if(data.success) {
+                myUsername = data.username;
+                document.getElementById('auth-overlay').style.display = 'none';
+            } else {
+                document.getElementById('auth-error').innerText = data.msg;
+            }
+        });
 
         // ВЕРНУЛ ВСЕ 150 ЦВЕТОВ И ДОБАВИЛ ЕЩЕ 350 ДЛЯ РОВНОГО СЧЕТА В 500!
         const colors = [
-            // Твои оригинальные 150 цветов
             '#000000', '#111111', '#222222', '#333333', '#444444', '#555555', '#666666', '#777777', '#888888', '#999999', '#AAAAAA', '#CCCCCC', '#EEEEEE', '#FFFFFF',
             '#4c0000', '#660000', '#800000', '#990000', '#b30000', '#cc0000', '#e60000', '#ff0000', '#ff1a1a', '#ff3333', '#ff4d4d', '#ff6666', '#ff8080', '#ff9999',
             '#4c2600', '#663300', '#804000', '#994d00', '#b35900', '#cc6600', '#e67300', '#ff8000', '#ff8c1a', '#ff9933', '#ffa64d', '#ffb366', '#ffbf80', '#ffcc99',
@@ -105,8 +150,6 @@
             '#4c004c', '#660066', '#800080', '#990099', '#b300b3', '#cc00cc', '#e600e6', '#ff00ff', '#ff1aff', '#ff33ff', '#ff4dff', '#ff66ff', '#ff80ff', '#ff99ff',
             '#4c0026', '#660033', '#800040', '#99004d', '#b30059', '#cc0066', '#e60073', '#ff0080', '#ff1a8c', '#ff3399', '#ff4da6', '#ff66b3', '#ff80bf', '#ff99cc',
             '#ffdfc4', '#f0d5bc', '#e2b999', '#c58c61', '#8d5524', '#c68642', '#e0ac69', '#f1c27d', '#ffdbac', '#5c3a21',
-            
-            // Расширенная палитра (еще 350 цветов!)
             '#050505', '#0A0A0A', '#0F0F0F', '#141414', '#191919', '#1E1E1E', '#232323', '#282828', '#2D2D2D', '#383838', '#3D3D3D', '#424242', '#474747', '#4C4C4C',
             '#515151', '#565656', '#5C5C5C', '#616161', '#6B6B6B', '#707070', '#757575', '#7A7A7A', '#7F7F7F', '#858585', '#8A8A8A', '#8F8F8F', '#949494', '#9E9E9E',
             '#A3A3A3', '#A8A8A8', '#ADADAD', '#B3B3B3', '#B8B8B8', '#BDBDBD', '#C2C2C2', '#C7C7C7', '#D1D1D1', '#D6D6D6', '#DBDBDB', '#E0E0E0', '#E5E5E5', '#EBEBEB',
@@ -118,32 +161,26 @@
             '#DDA0DD', '#EE82EE', '#DA70D6', '#FF00FF', '#BA55D3', '#9370DB', '#8A2BE2', '#9400D3', '#9932CC', '#8B008B', '#800080', '#4B0082', '#FFF0F5', '#FFF5EE',
             '#F5FFFA', '#F0FFF0', '#F0FFFF', '#F8F8FF', '#FFFAFA', '#F5F5DC', '#FDF5E6', '#FAF0E6', '#FAEBD7', '#FFE4C4', '#DEB887', '#D2B48C', '#BC8F8F', '#F4A460',
             '#DAA520', '#B8860B', '#CD853F', '#D2691E', '#8B4513', '#A0522D', '#A52A2A', '#800000', '#2F4F4F', '#696969', '#708090', '#778899', '#BEBEBE', '#D3D3D3',
-            // Яркие неоновые и акцентные
             '#FF3366', '#FF3399', '#FF33CC', '#CC33FF', '#9933FF', '#6633FF', '#3333FF', '#3366FF', '#3399FF', '#33CCFF', '#33FFFF', '#33FFCC', '#33FF99', '#33FF66',
             '#33FF33', '#66FF33', '#99FF33', '#CCFF33', '#FFFF33', '#FFCC33', '#FF9933', '#FF6633', '#FF0033', '#FF0066', '#FF0099', '#FF00CC', '#CC00FF', '#9900FF',
             '#6600FF', '#3300FF', '#0000FF', '#0033FF', '#0066FF', '#0099FF', '#00CCFF', '#00FFFF', '#00FFCC', '#00FF99', '#00FF66', '#00FF33', '#00FF00', '#33FF00',
             '#66FF00', '#99FF00', '#CCFF00', '#FFFF00', '#FFCC00', '#FF9900', '#FF6600', '#FF3300', '#FF0000',
-            // Плотные темные оттенки
             '#1A0000', '#330000', '#4D0000', '#660000', '#800000', '#1A0D00', '#331A00', '#4D2600', '#663300', '#804000', '#1A1A00', '#333300', '#4D4D00', '#666600',
             '#808000', '#0D1A00', '#1A3300', '#264D00', '#336600', '#408000', '#001A00', '#003300', '#004D00', '#006600', '#008000', '#001A0D', '#00331A', '#004D26',
             '#006633', '#008040', '#001A1A', '#003333', '#004D4D', '#006666', '#008080', '#000D1A', '#001A33', '#00264D', '#003366', '#004080', '#00001A', '#000033',
             '#00004D', '#000066', '#000080', '#0D001A', '#1A0033', '#26004D', '#330066', '#400080', '#1A001A', '#330033', '#4D004D', '#660066', '#800080', '#1A000D',
             '#33001A', '#4D0026', '#660033', '#800040',
-            // Экстра-светлые пастели (идеально для фонов или облаков)
             '#FFF2F2', '#FFE5E5', '#FFD8D8', '#FFCCCC', '#FFBFBF', '#FFF9F2', '#FFF2E5', '#FFECD8', '#FFE5CC', '#FFDFBF', '#FFFFF2', '#FFFFE5', '#FFFFD8', '#FFFFCC',
             '#FFFFBF', '#F9FFF2', '#F2FFE5', '#ECFFD8', '#E5FFCC', '#DFFFFB', '#F2FFF9', '#E5FFF2', '#D8FFEC', '#CCFFE5', '#BFFFFB', '#F2FFFF', '#E5FFFF', '#D8FFFF',
             '#CCFFFF', '#BFFFFF', '#F2F9FF', '#E5F2FF', '#D8ECFF', '#CCE5FF', '#BFDFFF', '#F2F2FF', '#E5E5FF', '#D8D8FF', '#CCCCFF', '#BFBFFF', '#F9F2FF', '#F2E5FF',
             '#ECD8FF', '#E5CCFF', '#DFBFFF', '#FFF2FF', '#FFE5FF', '#FFD8FF', '#FFCCFF', '#FFBFFF', '#FFF2F9', '#FFE5F2', '#FFD8EC', '#FFCCE5', '#FFBFDF',
-            // Телесные и земляные оттенки (для персонажей и почвы)
             '#FFDFC4', '#F0D5BC', '#E2B999', '#C58C61', '#8D5524', '#C68642', '#E0AC69', '#F1C27D', '#FFDBAC', '#5C3A21', '#4A2E1B', '#382215', '#26170E', '#8B5A2B',
             '#CD853F', '#D2691E', '#A0522D', '#8B4513', '#6B4226', '#4E311A', '#A37C64', '#C9A38B', '#E5C6B1', '#F6E0D2', '#FFF0E6', '#2A201B', '#3B2D26', '#4C3A31',
-            // Металлические оттенки (оружие, броня)
             '#B0C4DE', '#C0C0C0', '#A9A9A9', '#808080', '#696969', '#778899', '#708090', '#2F4F4F', '#D4AF37', '#FFD700', '#DAA520', '#B8860B', '#CD7F32', '#B87333',
             '#8C7853', '#A67D3D', '#C5B358', '#E5E4E2', '#D8D8D8', '#C1C1C1', '#A5A5A5', '#8C8C8C', '#737373', '#595959', '#404040', '#262626', '#0D0D0D'
         ];
         let selectedColor = '#ff0000';
 
-        // Рендер палитры
         colors.forEach(c => {
             const b = document.createElement('div');
             b.className = 'color-btn';
@@ -157,70 +194,88 @@
             document.querySelectorAll('.color-btn').forEach(el => el.classList.remove('active'));
             selectedColor = color; activePreview.style.background = color;
             if(btnEl) btnEl.classList.add('active');
-            else { // Ищем кнопку в палитре, если выбрали пипеткой
+            else { 
                 const foundBtn = Array.from(document.querySelectorAll('.color-btn')).find(b => b.style.backgroundColor === color || b.style.backgroundColor === hexToRgb(color));
                 if(foundBtn) foundBtn.classList.add('active');
             }
         }
 
-        // Вспомогательная функция для подсветки нужной кнопки
         function hexToRgb(hex) {
             const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
             return `rgb(${r}, ${g}, ${b})`;
         }
 
-        // Чат
-        chatToggle.onclick = () => { chatInputContainer.classList.toggle('open'); if(chatInputContainer.classList.contains('open')) chatInput.focus(); cancelEyedropper(); popup.classList.remove('open'); };
+        // Чат (ИЗМЕНЕНО: теперь с именами)
+        chatToggle.onclick = () => { chatInputContainer.classList.toggle('open'); if(chatInputContainer.classList.contains('open')) chatInput.focus(); cancelTools(); popup.classList.remove('open'); };
         chatInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') sendMessage(); });
         function sendMessage() { const text = chatInput.value.trim(); if(!text) return; socket.emit('sendMessage', { text: text }); chatInput.value = ''; chatInputContainer.classList.remove('open'); }
         socket.on('receiveMessage', (data) => {
-            const msg = document.createElement('div'); msg.className = 'chat-msg'; msg.textContent = `[..${data.id.substring(0,3)}] ${data.text}`; chatContainer.prepend(msg);
-            setTimeout(() => { if(msg && msg.parentNode) msg.parentNode.removeChild(msg); }, 5000);
+            const msg = document.createElement('div'); msg.className = 'chat-msg'; 
+            msg.innerHTML = `<span class="chat-username">[${data.username}]</span> ${data.text}`; 
+            chatContainer.prepend(msg);
+            setTimeout(() => { if(msg && msg.parentNode) msg.parentNode.removeChild(msg); }, 8000);
         });
 
-        function resetCamera() { scale = Math.min(window.innerWidth, window.innerHeight) / 1000; panX = (window.innerWidth - 1000 * scale) / 2; panY = (window.innerHeight - 1000 * scale) / 2; updateTransform(); }
-        document.getElementById('palette-toggle').onclick = () => { popup.classList.add('open'); cancelEyedropper(); chatInputContainer.classList.remove('open'); };
+        // ИЗМЕНЕНО: 1000 на 2000
+        function resetCamera() { scale = Math.min(window.innerWidth, window.innerHeight) / 2000; panX = (window.innerWidth - 2000 * scale) / 2; panY = (window.innerHeight - 2000 * scale) / 2; updateTransform(); }
+        document.getElementById('palette-toggle').onclick = () => { popup.classList.add('open'); cancelTools(); chatInputContainer.classList.remove('open'); };
         document.getElementById('close-btn').onclick = () => popup.classList.remove('open');
         
-        // Включение пипетки
-        eyedropperToggle.onclick = () => { isEyedropperMode = !isEyedropperMode; eyedropperToggle.classList.toggle('active', isEyedropperMode); canvas.style.cursor = isEyedropperMode ? 'crosshair' : 'auto'; if(isEyedropperMode) { popup.classList.remove('open'); chatInputContainer.classList.remove('open'); } };
-        function cancelEyedropper() { isEyedropperMode = false; eyedropperToggle.classList.remove('active'); canvas.style.cursor = 'auto'; }
-
-        // Координаты и UI
-        function updateTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; updateUI({x: -1, y: -1}); }
-        function getCoords(clientX, clientY) { const rect = canvas.getBoundingClientRect(); return { x: Math.floor((clientX - rect.left) / (rect.width / 1000)), y: Math.floor((clientY - rect.top) / (rect.height / 1000)) }; }
-        function isUI(e) { return e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup') || e.target.closest('#top-ui') || e.target.closest('#chat-container'); }
-
-        // --- ИСПРАВЛЕННАЯ ПИПЕТКА ---
-        function pickColor(clientX, clientY) { 
-            const c = getCoords(clientX, clientY); // Получаем реальные координаты 0-1000
-            if (c.x >= 0 && c.x < 1000 && c.y >= 0 && c.y < 1000) {
-                // Берем пиксель строго по координатам холста, независимо от зума
-                const pixel = ctx.getImageData(c.x, c.y, 1, 1).data; 
-                if (pixel[3] === 0) { // Если пиксель пустой (прозрачный)
-                    selectColor('#ffffff');
-                } else {
-                    const hex = "#" + ((1 << 24) + (pixel[0] << 16) + (pixel[1] << 8) + pixel[2]).toString(16).slice(1); 
-                    selectColor(hex); 
-                }
-            }
-            cancelEyedropper(); 
+        // Включение пипетки и лупы
+        eyedropperToggle.onclick = () => { isEyedropperMode = !isEyedropperMode; isInspectorMode = false; updateToolsUI(); };
+        inspectorToggle.onclick = () => { isInspectorMode = !isInspectorMode; isEyedropperMode = false; updateToolsUI(); };
+        function cancelTools() { isEyedropperMode = false; isInspectorMode = false; updateToolsUI(); }
+        function updateToolsUI() {
+            eyedropperToggle.classList.toggle('active', isEyedropperMode);
+            inspectorToggle.classList.toggle('active', isInspectorMode);
+            canvas.style.cursor = isEyedropperMode ? 'crosshair' : (isInspectorMode ? 'help' : 'auto');
+            if(isEyedropperMode || isInspectorMode) { popup.classList.remove('open'); chatInputContainer.classList.remove('open'); }
         }
 
-        // Управление
-        window.addEventListener('mousedown', (e) => { if(isUI(e)) return; if(isEyedropperMode) return; isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY; });
+        function updateTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; updateUI({x: -1, y: -1}); }
+        // ИЗМЕНЕНО: 1000 на 2000
+        function getCoords(clientX, clientY) { const rect = canvas.getBoundingClientRect(); return { x: Math.floor((clientX - rect.left) / (rect.width / 2000)), y: Math.floor((clientY - rect.top) / (rect.height / 2000)) }; }
+        function isUI(e) { return e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup') || e.target.closest('#top-ui') || e.target.closest('#chat-container') || e.target.closest('#auth-overlay'); }
+
+        function pickColor(clientX, clientY) { 
+            const c = getCoords(clientX, clientY); 
+            if (c.x >= 0 && c.x < 2000 && c.y >= 0 && c.y < 2000) {
+                const pixel = ctx.getImageData(c.x, c.y, 1, 1).data; 
+                if (pixel[3] === 0) { selectColor('#ffffff'); } 
+                else { const hex = "#" + ((1 << 24) + (pixel[0] << 16) + (pixel[1] << 8) + pixel[2]).toString(16).slice(1); selectColor(hex); }
+            }
+            cancelTools(); 
+        }
+
+        // ДОБАВЛЕНО: Функция просмотра автора
+        function inspectPixelAction(clientX, clientY) {
+            const c = getCoords(clientX, clientY);
+            if (c.x >= 0 && c.x < 2000 && c.y >= 0 && c.y < 2000) {
+                document.getElementById('author-info').innerText = 'Загрузка...';
+                socket.emit('inspectPixel', { x: c.x, y: c.y });
+            }
+            cancelTools();
+        }
+        socket.on('pixelInfo', (data) => {
+            document.getElementById('author-info').innerText = `| Автор: ${data.author}`;
+            setTimeout(() => { document.getElementById('author-info').innerText = ''; }, 5000);
+        });
+
+        window.addEventListener('mousedown', (e) => { if(isUI(e)) return; if(isEyedropperMode || isInspectorMode) return; isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY; });
         window.addEventListener('mousemove', (e) => { const c = getCoords(e.clientX, e.clientY); updateUI(c); if (!isDragging) return; hasMoved = true; panX = e.clientX - startX; panY = e.clientY - startY; updateTransform(); });
-        window.addEventListener('mouseup', (e) => { if(isUI(e)) return; if(isEyedropperMode) { pickColor(e.clientX, e.clientY); return; } if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY)); isDragging = false; });
+        window.addEventListener('mouseup', (e) => { if(isUI(e)) return; if(isEyedropperMode) { pickColor(e.clientX, e.clientY); return; } if(isInspectorMode) { inspectPixelAction(e.clientX, e.clientY); return; } if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY)); isDragging = false; });
         
-        window.addEventListener('touchstart', (e) => { if(isUI(e)) return; if (e.touches.length === 1) { if(isEyedropperMode) return; isDragging = true; hasMoved = false; startX = e.touches[0].clientX - panX; startY = e.touches[0].clientY - panY; } else if (e.touches.length === 2) { cancelEyedropper(); isDragging = false; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } }, {passive: false});
+        window.addEventListener('touchstart', (e) => { if(isUI(e)) return; if (e.touches.length === 1) { if(isEyedropperMode || isInspectorMode) return; isDragging = true; hasMoved = false; startX = e.touches[0].clientX - panX; startY = e.touches[0].clientY - panY; } else if (e.touches.length === 2) { cancelTools(); isDragging = false; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } }, {passive: false});
         window.addEventListener('touchmove', (e) => { if(isUI(e)) return; e.preventDefault(); if (e.touches.length === 1 && isDragging) { hasMoved = true; panX = e.touches[0].clientX - startX; panY = e.touches[0].clientY - startY; updateTransform(); } else if (e.touches.length === 2) { const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); const delta = dist / lastDist; const newScale = Math.max(0.1, Math.min(scale * delta, 500)); const midX = (e.touches[0].clientX + e.touches[1].clientX)/2; const midY = (e.touches[0].clientY + e.touches[1].clientY)/2; panX = midX - (midX - panX) * (newScale / scale); panY = midY - (midY - panY) * (newScale / scale); scale = newScale; lastDist = dist; updateTransform(); } }, {passive: false});
-        window.addEventListener('touchend', (e) => { if(isUI(e)) return; if(isEyedropperMode) { pickColor(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; } if (!hasMoved && isDragging) placePixel(getCoords(e.changedTouches[0].clientX, e.changedTouches[0].clientY)); isDragging = false; lastDist = 0; });
+        window.addEventListener('touchend', (e) => { if(isUI(e)) return; if(isEyedropperMode) { pickColor(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; } if(isInspectorMode) { inspectPixelAction(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; } if (!hasMoved && isDragging) placePixel(getCoords(e.changedTouches[0].clientX, e.changedTouches[0].clientY)); isDragging = false; lastDist = 0; });
         window.addEventListener('wheel', (e) => { if(isUI(e)) return; e.preventDefault(); const delta = e.deltaY > 0 ? 0.8 : 1.25; const newScale = Math.max(0.1, Math.min(scale * delta, 500)); panX = e.clientX - (e.clientX - panX) * (newScale / scale); panY = e.clientY - (e.clientY - panY) * (newScale / scale); scale = newScale; updateTransform(); }, {passive: false});
 
         let lastTime = 0;
-        function placePixel(c) { const now = Date.now(); if (!isActuallyAdmin && (now - lastTime < 3000)) return; if (c.x < 0 || c.x >= 1000 || c.y < 0 || c.y >= 1000) return; ctx.fillStyle = selectedColor; ctx.fillRect(c.x, c.y, 1, 1); socket.emit('drawPixel', { x: c.x, y: c.y, color: selectedColor, adminKey: adminKey }); lastTime = now; }
+        // ИЗМЕНЕНО: 1000 на 2000
+        function placePixel(c) { const now = Date.now(); if (!isActuallyAdmin && (now - lastTime < 3000)) return; if (c.x < 0 || c.x >= 2000 || c.y < 0 || c.y >= 2000) return; ctx.fillStyle = selectedColor; ctx.fillRect(c.x, c.y, 1, 1); socket.emit('drawPixel', { x: c.x, y: c.y, color: selectedColor, adminKey: adminKey }); lastTime = now; }
         
-        function updateUI(c) { if(c.x >= 0 && c.x < 1000 && c.y >= 0 && c.y < 1000) { document.getElementById('coords').textContent = `X: ${c.x}, Y: ${c.y}`; if(scale > 2) { const rect = canvas.getBoundingClientRect(); const ps = rect.width / 1000; cursorHint.style.display = 'block'; cursorHint.style.width = ps + 'px'; cursorHint.style.height = ps + 'px'; cursorHint.style.left = (rect.left + c.x * ps) + 'px'; cursorHint.style.top = (rect.top + c.y * ps) + 'px'; } } else { cursorHint.style.display = 'none'; } }
+        // ИЗМЕНЕНО: 1000 на 2000
+        function updateUI(c) { if(c.x >= 0 && c.x < 2000 && c.y >= 0 && c.y < 2000) { document.getElementById('coords').innerHTML = `X: ${c.x}, Y: ${c.y} <span id="author-info" style="color:#ffaa00; margin-left:10px;">${document.getElementById('author-info').innerText}</span>`; if(scale > 2) { const rect = canvas.getBoundingClientRect(); const ps = rect.width / 2000; cursorHint.style.display = 'block'; cursorHint.style.width = ps + 'px'; cursorHint.style.height = ps + 'px'; cursorHint.style.left = (rect.left + c.x * ps) + 'px'; cursorHint.style.top = (rect.top + c.y * ps) + 'px'; } } else { cursorHint.style.display = 'none'; } }
         
         socket.on('initBoard', (data) => data.forEach(([k, c]) => { const [x,y]=k.split(','); ctx.fillStyle=c; ctx.fillRect(x,y,1,1); }));
         socket.on('updatePixel', (d) => { ctx.fillStyle=d.color; ctx.fillRect(d.x, d.y, 1, 1); });
