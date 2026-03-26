@@ -3,38 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Battle PRO 🚀</title>
+    <title>Pixel Battle 2000x2000</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #121212; font-family: sans-serif; touch-action: none; user-select: none; }
         #game-container { width: 100vw; height: 100vh; position: relative; overflow: hidden; background: #000; }
+        /* image-rendering: pixelated важен, чтобы при зуме пиксели были четкими квадратами */
         #canvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; background-color: white; transform-origin: 0 0; }
-        
-        /* Предпросмотр (тусклый) */
-        #preview-canvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; pointer-events: none; transform-origin: 0 0; opacity: 0.5; z-index: 2; }
-        
-        #cursor-hint { position: absolute; pointer-events: none; border: 2px solid #fff; box-sizing: border-box; display: none; z-index: 5; }
         
         #top-ui { position: fixed; top: 15px; left: 15px; right: 15px; display: flex; justify-content: space-between; pointer-events: none; z-index: 100; }
         .glass { background: rgba(0, 0, 0, 0.8); color: white; padding: 10px; border-radius: 10px; font-family: monospace; font-size: 11px; border: 1px solid #333; pointer-events: auto; }
         
         #bottom-ui { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a1a; padding: 10px; border-radius: 40px; display: flex; align-items: center; gap: 8px; z-index: 100; border: 1px solid #444; }
-        .icon-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid #333; display: flex; align-items: center; justify-content: center; font-size: 16px; color: white; cursor: pointer; }
-        .tool-active { background: #00e5ff !important; color: #000 !important; }
-
+        .icon-btn { width: 40px; height: 40px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 1px solid #333; display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; cursor: pointer; }
+        
         #palette-toggle { background: linear-gradient(45deg, red, orange, yellow, green, blue, purple); border: 2px solid white; }
-        #timer { color: #aaa; font-size: 10px; font-weight: bold; width: 65px; text-align: center; }
-        #active-color-preview { width: 22px; height: 22px; border-radius: 5px; border: 1px solid #555; }
+        #timer { color: #aaa; font-size: 12px; font-weight: bold; width: 60px; text-align: center; }
+        #active-color-preview { width: 25px; height: 25px; border-radius: 5px; border: 1px solid #555; }
 
-        #full-palette-popup { position: fixed; bottom: -100%; left: 0; right: 0; height: 60vh; background: #111; border-top: 2px solid #444; border-radius: 20px 20px 0 0; z-index: 200; transition: 0.3s; padding: 15px; display: flex; flex-direction: column; }
+        #full-palette-popup { position: fixed; bottom: -100%; left: 0; right: 0; height: 50vh; background: #111; border-top: 2px solid #444; border-radius: 20px 20px 0 0; z-index: 200; transition: 0.3s; padding: 15px; overflow-y: auto; }
         #full-palette-popup.open { bottom: 0; }
-        #palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 5px; overflow-y: auto; }
-        .color-btn { aspect-ratio: 1; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
-        .color-btn.active { border-color: white; }
+        #palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 5px; }
+        .color-btn { aspect-ratio: 1; border-radius: 4px; cursor: pointer; }
 
-        #chat-container { position: fixed; left: 15px; bottom: 80px; width: 220px; max-height: 150px; overflow: hidden; pointer-events: none; z-index: 90; display: flex; flex-direction: column-reverse; gap: 4px; }
-        .chat-msg { background: rgba(0, 0, 0, 0.7); color: white; padding: 6px 10px; border-radius: 8px; font-size: 11px; animation: fadeOut 6s forwards; }
-        #chat-input-container { display: none; margin-left: auto; pointer-events: auto; }
-        #chat-input { background: #333; color: #fff; border: 1px solid #555; padding: 5px; border-radius: 5px; outline: none; width: 100px; }
+        #chat-container { position: fixed; left: 15px; bottom: 80px; width: 200px; max-height: 150px; overflow: hidden; pointer-events: none; display: flex; flex-direction: column-reverse; gap: 4px; }
+        .chat-msg { background: rgba(0, 0, 0, 0.7); color: white; padding: 5px 10px; border-radius: 8px; font-size: 11px; animation: fadeOut 5s forwards; }
+        #chat-input { background: #333; color: #fff; border: 1px solid #555; padding: 8px; border-radius: 20px; outline: none; width: 120px; pointer-events: auto; }
         @keyframes fadeOut { 0% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
     </style>
 </head>
@@ -46,31 +39,22 @@
 </div>
 
 <div id="game-container">
-    <canvas id="canvas" width="1000" height="1000"></canvas>
-    <canvas id="preview-canvas" width="1000" height="1000"></canvas>
-    <div id="cursor-hint"></div>
+    <canvas id="canvas" width="2000" height="2000"></canvas>
 </div>
 
 <div id="chat-container"></div>
 
 <div id="bottom-ui">
-    <div id="palette-toggle" class="icon-btn" title="Палитра"></div>
-    <div id="eyedropper-btn" class="icon-btn">🧪</div>
-    <div id="line-btn" class="icon-btn">📏</div>
-    <div id="rect-btn" class="icon-btn">🔲</div>
-    <div id="circle-btn" class="icon-btn">⭕</div>
-    <div id="chat-toggle" class="icon-btn">💬</div>
-    <div id="chat-input-container">
-        <input type="text" id="chat-input" placeholder="Сообщение..." maxlength="50">
-    </div>
+    <div id="palette-toggle" class="icon-btn"></div>
+    <input type="text" id="chat-input" placeholder="Чат..." maxlength="50">
     <div id="active-color-preview"></div>
     <div id="timer">ГОТОВ</div>
 </div>
 
 <div id="full-palette-popup">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <span style="color:white; font-weight:bold;">Палитра (500 цветов)</span>
-        <span id="close-palette" style="color:red; cursor:pointer; font-size:20px;">✕</span>
+    <div style="display:flex; justify-content:space-between; color:white; margin-bottom:15px;">
+        <b>Выбери цвет</b>
+        <span id="close-palette" style="cursor:pointer; font-size:20px;">✕</span>
     </div>
     <div id="palette-grid"></div>
 </div>
@@ -79,270 +63,124 @@
 <script>
     const socket = io();
     const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const pCanvas = document.getElementById('preview-canvas');
-    const pCtx = pCanvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
     
-    const timerEl = document.getElementById('timer');
-    const activeColorEl = document.getElementById('active-color-preview');
-    const chatContainer = document.getElementById('chat-container');
-
-    // Параметры
-    const urlParams = new URLSearchParams(window.location.search);
-    const isAdmin = urlParams.get('admin') === 'supertop';
-    
-    let currentMode = 'pixel'; // pixel, eyedropper, line, rect, circle
+    let scale = 0.5; // Начинаем с чуть меньшего зума, так как поле большое
+    let panX = 0, panY = 0;
     let selectedColor = '#ff0000';
     let lastDrawTime = 0;
-    let isWaitingForShape = false;
-    let shapeEndTime = 0;
-    let pendingShape = { pixels: [], color: '' };
 
-    // Камера
-    let scale = 1, panX = 0, panY = 0, isDragging = false, lastX, lastY;
-
-    // Генерация 500 цветов
-    const colors = [];
-    for(let i=0; i<500; i++) {
-        const hue = (i * 360 / 500);
-        const sat = 70 + (i % 30);
-        const light = 40 + (i % 20);
-        colors.push(`hsl(${hue}, ${sat}%, ${light}%)`);
-    }
-
+    // Палитра (500 цветов)
     const grid = document.getElementById('palette-grid');
-    colors.forEach(c => {
+    for(let i=0; i<500; i++) {
+        const color = `hsl(${(i * 360 / 500)}, 70%, 50%)`;
         const div = document.createElement('div');
         div.className = 'color-btn';
-        div.style.backgroundColor = c;
+        div.style.backgroundColor = color;
         div.onclick = () => {
-            selectedColor = div.style.backgroundColor;
-            activeColorEl.style.backgroundColor = selectedColor;
+            selectedColor = color;
+            document.getElementById('active-color-preview').style.backgroundColor = color;
             document.getElementById('full-palette-popup').classList.remove('open');
         };
         grid.appendChild(div);
-    });
-    activeColorEl.style.backgroundColor = selectedColor;
-
-    // Переключение инструментов
-    function setMode(mode) {
-        currentMode = mode;
-        [ 'eyedropper-btn', 'line-btn', 'rect-btn', 'circle-btn'].forEach(id => {
-            document.getElementById(id).classList.remove('tool-active');
-        });
-        if(mode !== 'pixel') document.getElementById(mode+'-btn').classList.add('tool-active');
     }
+    document.getElementById('active-color-preview').style.backgroundColor = selectedColor;
 
-    document.getElementById('eyedropper-btn').onclick = () => setMode(currentMode === 'eyedropper' ? 'pixel' : 'eyedropper');
-    document.getElementById('line-btn').onclick = () => setMode(currentMode === 'line' ? 'pixel' : 'line');
-    document.getElementById('rect-btn').onclick = () => setMode(currentMode === 'rect' ? 'pixel' : 'rect');
-    document.getElementById('circle-btn').onclick = () => setMode(currentMode === 'circle' ? 'pixel' : 'circle');
     document.getElementById('palette-toggle').onclick = () => document.getElementById('full-palette-popup').classList.add('open');
     document.getElementById('close-palette').onclick = () => document.getElementById('full-palette-popup').classList.remove('open');
-    document.getElementById('chat-toggle').onclick = () => {
-        const container = document.getElementById('chat-input-container');
-        container.style.display = container.style.display === 'block' ? 'none' : 'block';
-    };
 
-    // Алгоритмы
-    function getLinePixels(x1, y1, x2, y2) {
-        let pixels = [];
-        let dx = Math.abs(x2 - x1), dy = Math.abs(y2 - y1);
-        let sx = (x1 < x2) ? 1 : -1, sy = (y1 < y2) ? 1 : -1;
-        let err = dx - dy;
-        while(true) {
-            pixels.push({x: x1, y: y1});
-            if(x1 === x2 && y1 === y2) break;
-            let e2 = 2 * err;
-            if(e2 > -dy) { err -= dy; x1 += sx; }
-            if(e2 < dx) { err += dx; y1 += sy; }
-        }
-        return pixels;
-    }
-
-    function getRectPixels(x1, y1, x2, y2) {
-        let pixels = [];
-        for(let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
-            pixels.push({x, y: y1}, {x, y: y2});
-        }
-        for(let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
-            pixels.push({x: x1, y}, {x: x2, y});
-        }
-        return pixels;
-    }
-
-    function getCirclePixels(xc, yc, x2, y2) {
-        let r = Math.floor(Math.sqrt((x2-xc)**2 + (y2-yc)**2));
-        let pixels = [];
-        let x = 0, y = r, d = 3 - 2 * r;
-        const add = (x, y) => pixels.push({x: xc+x, y: yc+y}, {x: xc-x, y: yc+y}, {x: xc+x, y: yc-y}, {x: xc-x, y: yc-y}, {x: xc+y, y: yc+x}, {x: xc-y, y: yc+x}, {x: xc+y, y: yc-x}, {x: xc-y, y: yc-x});
-        while (y >= x) { add(x, y); x++; if (d > 0) { y--; d = d + 4 * (x - y) + 10; } else d = d + 4 * x + 6; }
-        return pixels;
-    }
-
-    // Взаимодействие
-    let startPoint = null;
-    let isDrawing = false;
-
-    window.addEventListener('mousedown', (e) => {
-        if(e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup')) return;
-        const coords = getCoords(e);
-        
-        if(currentMode !== 'pixel' && currentMode !== 'eyedropper') {
-            if(isWaitingForShape) return;
-            startPoint = coords;
-            isDrawing = true;
-        } else if(currentMode === 'eyedropper') {
-            const data = ctx.getImageData(coords.x, coords.y, 1, 1).data;
-            selectedColor = `rgb(${data[0]}, ${data[1]}, ${data[2]})`;
-            activeColorEl.style.backgroundColor = selectedColor;
-            setMode('pixel');
-        } else {
-            isDragging = true;
-            lastX = e.clientX; lastY = e.clientY;
-            if(!isAdmin && Date.now() - lastDrawTime < 3000) return;
-            placePixel(coords.x, coords.y);
+    // Отрисовка
+    socket.on('initBoard', (board) => {
+        for (const key in board) {
+            const [x, y] = key.split(',');
+            ctx.fillStyle = board[key];
+            ctx.fillRect(x, y, 1, 1);
         }
     });
 
-    window.addEventListener('mousemove', (e) => {
+    socket.on('updatePixel', (data) => {
+        ctx.fillStyle = data.color;
+        ctx.fillRect(data.x, data.y, 1, 1);
+    });
+
+    let isDragging = false, lastX, lastY;
+
+    window.onmousedown = (e) => {
+        if(e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup')) return;
+        
+        isDragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+
+        const coords = getCoords(e);
+        const now = Date.now();
+        if (now - lastDrawTime > 3000) {
+            ctx.fillStyle = selectedColor;
+            ctx.fillRect(coords.x, coords.y, 1, 1);
+            socket.emit('drawPixel', { x: coords.x, y: coords.y, color: selectedColor });
+            lastDrawTime = now;
+        }
+    };
+
+    window.onmousemove = (e) => {
         const coords = getCoords(e);
         document.getElementById('coords').innerText = `X: ${coords.x}, Y: ${coords.y}`;
 
-        if(isDrawing) {
-            pCtx.clearRect(0,0,1000,1000);
-            pCtx.fillStyle = selectedColor;
-            let pixels = [];
-            if(currentMode === 'line') pixels = getLinePixels(startPoint.x, startPoint.y, coords.x, coords.y);
-            if(currentMode === 'rect') pixels = getRectPixels(startPoint.x, startPoint.y, coords.x, coords.y);
-            if(currentMode === 'circle') pixels = getCirclePixels(startPoint.x, startPoint.y, coords.x, coords.y);
-            pixels.forEach(p => pCtx.fillRect(p.x, p.y, 1, 1));
-        }
-
-        if(isDragging) {
-            panX += e.clientX - lastX; panY += e.clientY - lastY;
-            lastX = e.clientX; lastY = e.clientY;
+        if (isDragging) {
+            panX += e.clientX - lastX;
+            panY += e.clientY - lastY;
+            lastX = e.clientX;
+            lastY = e.clientY;
             updateTransform();
         }
-    });
+    };
 
-    window.addEventListener('mouseup', (e) => {
-        if(isDrawing) {
-            const coords = getCoords(e);
-            let pixels = [];
-            if(currentMode === 'line') pixels = getLinePixels(startPoint.x, startPoint.y, coords.x, coords.y);
-            if(currentMode === 'rect') pixels = getRectPixels(startPoint.x, startPoint.y, coords.x, coords.y);
-            if(currentMode === 'circle') pixels = getCirclePixels(startPoint.x, startPoint.y, coords.x, coords.y);
-            
-            // Фильтруем дубликаты
-            pixels = pixels.filter((v,i,a)=>a.findIndex(t=>(t.x===v.x && t.y===v.y))===i);
-
-            if(isAdmin) {
-                socket.emit('drawShape', { pixels, color: selectedColor });
-                pCtx.clearRect(0,0,1000,1000);
-            } else {
-                isWaitingForShape = true;
-                pendingShape = { pixels, color: selectedColor };
-                shapeEndTime = Date.now() + (pixels.length * 3000);
-            }
-        }
-        isDrawing = false;
-        isDragging = false;
-    });
-
-    // Зум
-    window.addEventListener('wheel', (e) => {
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        scale *= delta;
+    window.onmouseup = () => isDragging = false;
+    window.onwheel = (e) => {
+        scale *= e.deltaY > 0 ? 0.9 : 1.1;
         updateTransform();
-    }, {passive: false});
+    };
 
     function getCoords(e) {
         const rect = canvas.getBoundingClientRect();
-        const x = Math.floor((e.clientX - rect.left) / (rect.width / 1000));
-        const y = Math.floor((e.clientY - rect.top) / (rect.height / 1000));
+        // ТЕПЕРЬ ДЕЛИМ НА (ширина / 2000), так как пикселей стало в 2 раза больше
+        const x = Math.floor((e.clientX - rect.left) / (rect.width / 2000));
+        const y = Math.floor((e.clientY - rect.top) / (rect.height / 2000));
         return { x, y };
     }
 
     function updateTransform() {
-        const t = `translate(${panX}px, ${panY}px) scale(${scale})`;
-        canvas.style.transform = t;
-        pCanvas.style.transform = t;
+        canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
     }
 
-    function placePixel(x, y) {
-        if(isWaitingForShape) return;
-        ctx.fillStyle = selectedColor;
-        ctx.fillRect(x, y, 1, 1);
-        socket.emit('drawPixel', { x, y, color: selectedColor });
-        lastDrawTime = Date.now();
-    }
+    setInterval(() => {
+        const remaining = Math.ceil((3000 - (Date.now() - lastDrawTime)) / 1000);
+        const timerEl = document.getElementById('timer');
+        if (remaining <= 0) {
+            timerEl.innerText = "ГОТОВ";
+            timerEl.style.color = "lime";
+        } else {
+            timerEl.innerText = remaining + "s";
+            timerEl.style.color = "red";
+        }
+    }, 100);
 
-    // Сокеты
-    socket.on('initBoard', (data) => data.forEach(([k, c]) => {
-        const [x, y] = k.split(',');
-        ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1);
-    }));
-
-    socket.on('updatePixel', (d) => {
-        ctx.fillStyle = d.color; ctx.fillRect(d.x, d.y, 1, 1);
-    });
-
-    socket.on('updateShape', (d) => {
-        ctx.fillStyle = d.color;
-        d.pixels.forEach(p => ctx.fillRect(p.x, p.y, 1, 1));
-    });
-
-    socket.on('userCount', (n) => document.getElementById('online-count').innerText = n);
-
-    socket.on('receiveMessage', (d) => {
-        const div = document.createElement('div');
-        div.className = 'chat-msg';
-        div.innerText = `${d.id.slice(0,4)}: ${d.text}`;
-        chatContainer.prepend(div);
-    });
-
+    // Чат
     document.getElementById('chat-input').onkeypress = (e) => {
-        if(e.key === 'Enter') {
+        if(e.key === 'Enter' && e.target.value.trim()) {
             socket.emit('sendMessage', { text: e.target.value });
             e.target.value = '';
         }
     };
-
-    // Таймер
-    setInterval(() => {
-        const now = Date.now();
-        if(isAdmin) {
-            timerEl.innerText = "АДМИН";
-            timerEl.style.color = "cyan";
-            return;
-        }
-
-        if(isWaitingForShape) {
-            const left = Math.ceil((shapeEndTime - now) / 1000);
-            if(left <= 0) {
-                socket.emit('drawShape', pendingShape);
-                isWaitingForShape = false;
-                pCtx.clearRect(0,0,1000,1000);
-                lastDrawTime = now;
-            } else {
-                timerEl.innerText = left + "s ⏳";
-                timerEl.style.color = "orange";
-            }
-        } else {
-            const left = Math.ceil((3000 - (now - lastDrawTime)) / 1000);
-            if(left <= 0) {
-                timerEl.innerText = "ГОТОВ";
-                timerEl.style.color = "lime";
-            } else {
-                timerEl.innerText = left + "s";
-                timerEl.style.color = "red";
-            }
-        }
-    }, 100);
+    socket.on('receiveMessage', (data) => {
+        const div = document.createElement('div');
+        div.className = 'chat-msg';
+        div.innerText = `${data.id.slice(0,4)}: ${data.text}`;
+        document.getElementById('chat-container').prepend(div);
+    });
+    socket.on('userCount', (count) => document.getElementById('online-count').innerText = count);
 
     updateTransform();
 </script>
-
 </body>
 </html>
