@@ -19,7 +19,7 @@ client.connect()
 
 // Кэш приватов в памяти
 let protectedZones = [];
-// ДОБАВЛЕНО: Глобальный переключатель кулдауна
+// Глобальный переключатель кулдауна
 let globalCooldownEnabled = true;
 
 async function loadZones() {
@@ -90,7 +90,10 @@ io.on('connection', async (socket) => {
     
     socket.username = 'Аноним';
 
-    const isAdminConnection = socket.handshake.headers.referer && socket.handshake.headers.referer.includes('admin=supertop');
+    // ИСПРАВЛЕНО: Более надежная проверка на админа (проверяем и referer, и query параметры)
+    const isAdminConnection = 
+        (socket.handshake.headers.referer && socket.handshake.headers.referer.includes('admin=supertop')) ||
+        (socket.handshake.query && socket.handshake.query.admin === 'supertop');
 
     // 1. Отправка доски
     try {
@@ -143,7 +146,8 @@ io.on('connection', async (socket) => {
     // 4. РИСОВАНИЕ
     socket.on('drawPixel', async (data) => {
         const { x, y, color, adminKey } = data;
-        const isAdmin = adminKey === 'supertop';
+        // ИСПРАВЛЕНО: Даем права, если подключение админское ИЛИ передан правильный ключ в событии
+        const isAdmin = adminKey === 'supertop' || isAdminConnection;
 
         if (await checkBan(socket.username) && !isAdmin) {
             return socket.emit('receiveMessage', { username: 'СИСТЕМА', text: 'Вы забанены и не можете рисовать!' });
@@ -164,14 +168,13 @@ io.on('connection', async (socket) => {
             if (isProtected) return;
         }
 
-        // ИЗМЕНЕНО: Логика кулдауна с учетом глобального переключателя
+        // Логика кулдауна с учетом глобального переключателя
         if (!isAdmin && globalCooldownEnabled) {
             const cooldown = 3000; // 3 секунды
             const now = Date.now();
             if (now - (socket.lastDrawTime || 0) < cooldown) return;
         }
         
-        // Обновляем время только если кулдаун включен, чтобы не тратить ресурсы зря
         if (globalCooldownEnabled) {
             socket.lastDrawTime = Date.now();
         }
@@ -194,8 +197,11 @@ io.on('connection', async (socket) => {
     socket.on('sendMessage', async (data) => {
         if (!data.text || data.text.trim() === '') return;
         
+        // ИСПРАВЛЕНО: Проверяем права админа для чата
+        const isMessageAdmin = isAdminConnection || data.adminKey === 'supertop';
+        
         // Команды только для админа
-        if (isAdminConnection) {
+        if (isMessageAdmin) {
             const text = data.text.trim();
             
             // Бан
@@ -227,7 +233,7 @@ io.on('connection', async (socket) => {
                 return io.emit('receiveMessage', { username: 'СИСТЕМА', text: 'Все приваты удалены!' });
             }
 
-            // ДОБАВЛЕНО: Команды кулдауна
+            // Команды кулдауна
             if (text === '/cooldown off') {
                 globalCooldownEnabled = false;
                 return io.emit('receiveMessage', { username: 'СИСТЕМА', text: '⚡ Кулдаун ОТКЛЮЧЕН! Режим пулемета активирован!' });
