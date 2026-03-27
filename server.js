@@ -17,8 +17,10 @@ client.connect()
     .then(() => console.log('✅ Успешное подключение к Postgres'))
     .catch(err => console.error('❌ Ошибка подключения к БД:', err.stack));
 
-// Кэш приватов в памяти для быстрой проверки
+// Кэш приватов в памяти
 let protectedZones = [];
+// ДОБАВЛЕНО: Глобальный переключатель кулдауна
+let globalCooldownEnabled = true;
 
 async function loadZones() {
     try {
@@ -53,7 +55,6 @@ async function initDB() {
             )
         `);
 
-        // ДОБАВЛЕНО: Таблица для приватов
         await client.query(`
             CREATE TABLE IF NOT EXISTS protected_zones (
                 id SERIAL PRIMARY KEY,
@@ -64,7 +65,7 @@ async function initDB() {
             )
         `);
         
-        await loadZones(); // Загружаем приваты при старте сервера
+        await loadZones();
         console.log('✅ Все таблицы базы данных готовы');
     } catch (err) {
         console.error('❌ Ошибка при инициализации БД:', err);
@@ -154,25 +155,27 @@ io.on('connection', async (socket) => {
         
         if (x < 0 || x >= 2000 || y < 0 || y >= 2000) return;
 
-        // ДОБАВЛЕНО: ПРОВЕРКА НА ПРИВАТ ТЕРРИТОРИИ
+        // Проверка привата
         if (!isAdmin) {
-            // Проверяем, попадает ли точка (x, y) хотя бы в одну защищенную зону
             const isProtected = protectedZones.some(z => 
                 x >= Math.min(z.x1, z.x2) && x <= Math.max(z.x1, z.x2) &&
                 y >= Math.min(z.y1, z.y2) && y <= Math.max(z.y1, z.y2)
             );
-            
-            if (isProtected) {
-                // Тихо игнорируем попытку нарисовать, чтобы не спамить в чат
-                return;
-            }
+            if (isProtected) return;
         }
 
-        const cooldown = isAdmin ? 0 : 3000; 
-        const now = Date.now();
-        if (!isAdmin && (now - (socket.lastDrawTime || 0) < cooldown)) return;
+        // ИЗМЕНЕНО: Логика кулдауна с учетом глобального переключателя
+        if (!isAdmin && globalCooldownEnabled) {
+            const cooldown = 3000; // 3 секунды
+            const now = Date.now();
+            if (now - (socket.lastDrawTime || 0) < cooldown) return;
+        }
+        
+        // Обновляем время только если кулдаун включен, чтобы не тратить ресурсы зря
+        if (globalCooldownEnabled) {
+            socket.lastDrawTime = Date.now();
+        }
 
-        socket.lastDrawTime = now;
         const key = `${x},${y}`;
 
         try {
@@ -187,7 +190,7 @@ io.on('connection', async (socket) => {
         } catch (err) { console.error('Ошибка сохранения пикселя:', err); }
     });
 
-    // 5. ЧАТ И БАН-КОМАНДЫ + КОМАНДЫ ПРИВАТА
+    // 5. ЧАТ И КОМАНДЫ АДМИНА
     socket.on('sendMessage', async (data) => {
         if (!data.text || data.text.trim() === '') return;
         
@@ -206,24 +209,32 @@ io.on('connection', async (socket) => {
 
             // Создание привата
             if (text.startsWith('/protect ')) {
-                // Ожидаем формат: /protect x1 y1 x2 y2
                 const parts = text.split(' ');
                 if (parts.length === 5) {
                     const x1 = parseInt(parts[1]), y1 = parseInt(parts[2]), x2 = parseInt(parts[3]), y2 = parseInt(parts[4]);
                     if (!isNaN(x1) && !isNaN(y1) && !isNaN(x2) && !isNaN(y2)) {
                         await client.query('INSERT INTO protected_zones (x1, y1, x2, y2) VALUES ($1, $2, $3, $4)', [x1, y1, x2, y2]);
-                        await loadZones(); // Обновляем кэш приватов
-                        return io.emit('receiveMessage', { username: 'СИСТЕМА', text: `Территория (${x1},${y1}) - (${x2},${y2}) успешно защищена!` });
+                        await loadZones(); 
+                        return io.emit('receiveMessage', { username: 'СИСТЕМА', text: `Территория (${x1},${y1}) - (${x2},${y2}) защищена!` });
                     }
                 }
                 return socket.emit('receiveMessage', { username: 'СИСТЕМА', text: 'Ошибка! Используй: /protect X1 Y1 X2 Y2' });
             }
 
-            // Снятие всех приватов (глобальная очистка)
             if (text === '/unprotectall') {
                 await client.query('TRUNCATE TABLE protected_zones');
                 await loadZones();
                 return io.emit('receiveMessage', { username: 'СИСТЕМА', text: 'Все приваты удалены!' });
+            }
+
+            // ДОБАВЛЕНО: Команды кулдауна
+            if (text === '/cooldown off') {
+                globalCooldownEnabled = false;
+                return io.emit('receiveMessage', { username: 'СИСТЕМА', text: '⚡ Кулдаун ОТКЛЮЧЕН! Режим пулемета активирован!' });
+            }
+            if (text === '/cooldown on') {
+                globalCooldownEnabled = true;
+                return io.emit('receiveMessage', { username: 'СИСТЕМА', text: '⏳ Кулдаун ВКЛЮЧЕН. Вернулись к нормальному ритму.' });
             }
         }
 
