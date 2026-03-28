@@ -17,7 +17,7 @@
         .icon-btn { width: 36px; height: 36px; background: rgba(255,255,255,0.1); border-radius: 10px; border: 1px solid #333; display: flex; align-items: center; justify-content: center; font-size: 16px; color: white; cursor: pointer; }
         #palette-toggle { background: linear-gradient(45deg, red, orange, yellow, green, blue, purple); border: 2px solid white; }
         #eyedropper-toggle.active { background: cyan; box-shadow: 0 0 10px cyan; }
-        #inspector-toggle.active { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; } /* ДОБАВЛЕНО */
+        #inspector-toggle.active { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; }
         #active-color-preview { width: 22px; height: 22px; border-radius: 5px; border: 1px solid #555; }
         #timer { color: #aaa; font-size: 10px; font-weight: bold; width: 60px; text-align: center; }
 
@@ -36,7 +36,7 @@
         #chat-input { background: rgba(255,255,255,0.1); color: white; border: 1px solid #444; padding: 6px; border-radius: 8px; font-size: 12px; outline: none; width: 100px; }
         @keyframes fadeMessage { 0% { opacity: 1; transform: translateY(0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-10px); } }
 
-        /* ДОБАВЛЕНО: ОКНО АВТОРИЗАЦИИ */
+        /* АВТОРИЗАЦИЯ */
         #auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; justify-content: center; align-items: center; flex-direction: column; color: white; }
         .auth-box { background: #1a1a1a; padding: 25px; border-radius: 15px; border: 1px solid #444; text-align: center; width: 280px; }
         .auth-input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 8px; border: none; background: #333; color: white; outline: none; }
@@ -44,6 +44,10 @@
         #login-btn { background: #00cc66; color: white; }
         #reg-btn { background: #444; color: white; margin-top: 10px; }
         #auth-error { color: #ff4444; font-size: 12px; margin-top: 10px; min-height: 15px; }
+
+        /* ДОБАВЛЕНА КНОПКА АВТОПЕЧАТИ */
+        #admin-auto-draw { background: #ffaa00; color: #000; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; display: none; margin-top: 5px; }
+        #admin-auto-draw:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
@@ -65,12 +69,14 @@
     </div>
     
     <div id="stencil-ui" class="glass" style="display:none; position:fixed; top:60px; right:15px; flex-direction:column; gap:8px; z-index:101; width: 220px; font-family: sans-serif;">
-        <b style="color:#00ffff; text-align:center; font-size:14px;">Трафарет (Только тебе)</b>
+        <b style="color:#00ffff; text-align:center; font-size:14px;">Трафарет (Админ-панель)</b>
         <input type="file" id="stencil-file" accept="image/png, image/jpeg" style="font-size:11px; max-width: 100%;">
         <div style="display:flex; justify-content:space-between; align-items:center;">X на карте: <input type="number" id="stencil-x" value="0" style="width:60px; background:#333; color:white; border:1px solid #555; border-radius:4px; padding:2px;"></div>
         <div style="display:flex; justify-content:space-between; align-items:center;">Y на карте: <input type="number" id="stencil-y" value="0" style="width:60px; background:#333; color:white; border:1px solid #555; border-radius:4px; padding:2px;"></div>
         <div style="display:flex; justify-content:space-between; align-items:center;">Ширина: <input type="number" id="stencil-w" value="100" style="width:60px; background:#333; color:white; border:1px solid #555; border-radius:4px; padding:2px;"></div>
         <div style="display:flex; flex-direction:column; gap:4px;">Прозрачность: <input type="range" id="stencil-opacity" min="0" max="1" step="0.1" value="0.5" style="width:100%;"></div>
+        
+        <button id="admin-auto-draw">🚀 АВТО-ПЕЧАТЬ</button>
         <button id="stencil-clear" style="background:#ff4444; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer; font-weight:bold;">Убрать трафарет</button>
     </div>
 
@@ -115,7 +121,7 @@
         const popup = document.getElementById('full-palette-popup');
         const activePreview = document.getElementById('active-color-preview');
         const eyedropperToggle = document.getElementById('eyedropper-toggle');
-        const inspectorToggle = document.getElementById('inspector-toggle'); // ДОБАВЛЕНО
+        const inspectorToggle = document.getElementById('inspector-toggle');
         const chatContainer = document.getElementById('chat-container');
         const chatInputContainer = document.getElementById('chat-input-container');
         const chatInput = document.getElementById('chat-input');
@@ -125,12 +131,14 @@
         const adminKey = urlParams.get('admin'); 
         const isActuallyAdmin = adminKey === 'supertop';
 
+        // Показываем кнопку авто-печати только админу
+        if(isActuallyAdmin) document.getElementById('admin-auto-draw').style.display = 'block';
+
         let scale = 1, panX = 0, panY = 0, isDragging = false, startX, startY, hasMoved = false, lastDist = 0;
         let isEyedropperMode = false;
-        let isInspectorMode = false; // ДОБАВЛЕНО
-        let myUsername = "Аноним"; // ДОБАВЛЕНО
+        let isInspectorMode = false;
+        let myUsername = "Аноним";
 
-        // --- АВТОРИЗАЦИЯ (ДОБАВЛЕНО) ---
         document.getElementById('login-btn').onclick = () => {
             const u = document.getElementById('auth-login').value.trim();
             const p = document.getElementById('auth-pass').value.trim();
@@ -150,7 +158,6 @@
             }
         });
 
-        // ВЕРНУЛ ВСЕ 150 ЦВЕТОВ И ДОБАВИЛ ЕЩЕ 350 ДЛЯ РОВНОГО СЧЕТА В 500!
         const colors = [
             '#000000', '#111111', '#222222', '#333333', '#444444', '#555555', '#666666', '#777777', '#888888', '#999999', '#AAAAAA', '#CCCCCC', '#EEEEEE', '#FFFFFF',
             '#4c0000', '#660000', '#800000', '#990000', '#b30000', '#cc0000', '#e60000', '#ff0000', '#ff1a1a', '#ff3333', '#ff4d4d', '#ff6666', '#ff8080', '#ff9999',
@@ -218,7 +225,6 @@
             return `rgb(${r}, ${g}, ${b})`;
         }
 
-        // Чат (ИЗМЕНЕНО: теперь с именами)
         chatToggle.onclick = () => { chatInputContainer.classList.toggle('open'); if(chatInputContainer.classList.contains('open')) chatInput.focus(); cancelTools(); popup.classList.remove('open'); };
         chatInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') sendMessage(); });
         function sendMessage() { const text = chatInput.value.trim(); if(!text) return; socket.emit('sendMessage', { text: text }); chatInput.value = ''; chatInputContainer.classList.remove('open'); }
@@ -229,7 +235,6 @@
             setTimeout(() => { if(msg && msg.parentNode) msg.parentNode.removeChild(msg); }, 8000);
         });
 
-        // --- ЛОГИКА ТРАФАРЕТА (ДОБАВЛЕНО) ---
         const stencilToggle = document.getElementById('stencil-toggle');
         const stencilUI = document.getElementById('stencil-ui');
         const stencilFile = document.getElementById('stencil-file');
@@ -269,16 +274,12 @@
             const y = parseFloat(stY.value) || 0;
             const w = parseFloat(stW.value) || 100;
             const h = w * stencilBaseRatio;
-            
             stencilImg.style.width = w + 'px';
             stencilImg.style.height = h + 'px';
             stencilImg.style.opacity = stOp.value;
-            
-            // Синхронизация масштаба и позиции трафарета с зумом камеры
             stencilImg.style.transform = `translate(${panX + x * scale}px, ${panY + y * scale}px) scale(${scale})`;
         };
 
-        // Обновляем позицию на лету при изменении ползунков
         [stX, stY, stW, stOp].forEach(input => input.addEventListener('input', window.updateStencilPos));
 
         stClear.onclick = () => {
@@ -287,14 +288,56 @@
             stencilImg.src = '';
             stencilFile.value = '';
         };
-        // ------------------------------------
 
-        // ИЗМЕНЕНО: 1000 на 2000
+        // --- ЛОГИКА АВТОПЕЧАТИ (НОВОЕ) ---
+        document.getElementById('admin-auto-draw').onclick = async () => {
+            if(!stencilActive || !isActuallyAdmin) return alert("Сначала загрузи трафарет!");
+            if(!confirm("Начать автоматическое рисование?")) return;
+
+            const startX = parseInt(stX.value) || 0;
+            const startY = parseInt(stY.value) || 0;
+            const targetW = parseInt(stW.value) || 100;
+            const targetH = Math.round(targetW * stencilBaseRatio);
+
+            // Создаем невидимый холст для чтения пикселей
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = targetW;
+            tempCanvas.height = targetH;
+            tempCtx.drawImage(stencilImg, 0, 0, targetW, targetH);
+
+            const imgData = tempCtx.getImageData(0, 0, targetW, targetH).data;
+
+            for (let y = 0; y < targetH; y++) {
+                for (let x = 0; x < targetW; x++) {
+                    const idx = (y * targetW + x) * 4;
+                    const r = imgData[idx];
+                    const g = imgData[idx+1];
+                    const b = imgData[idx+2];
+                    const a = imgData[idx+3];
+
+                    // Если пиксель не прозрачный
+                    if (a > 10) {
+                        const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+                        socket.emit('drawPixel', { 
+                            x: startX + x, 
+                            y: startY + y, 
+                            color: hex, 
+                            adminKey: adminKey 
+                        });
+                        // Небольшая задержка, чтобы не спамить сокет слишком сильно
+                        await new Promise(res => setTimeout(res, 20)); 
+                    }
+                }
+            }
+            alert("Рисование завершено!");
+        };
+        // ---------------------------------
+
         function resetCamera() { scale = Math.min(window.innerWidth, window.innerHeight) / 2000; panX = (window.innerWidth - 2000 * scale) / 2; panY = (window.innerHeight - 2000 * scale) / 2; updateTransform(); }
         document.getElementById('palette-toggle').onclick = () => { popup.classList.add('open'); cancelTools(); chatInputContainer.classList.remove('open'); };
         document.getElementById('close-btn').onclick = () => popup.classList.remove('open');
         
-        // Включение пипетки и лупы
         eyedropperToggle.onclick = () => { isEyedropperMode = !isEyedropperMode; isInspectorMode = false; updateToolsUI(); };
         inspectorToggle.onclick = () => { isInspectorMode = !isInspectorMode; isEyedropperMode = false; updateToolsUI(); };
         function cancelTools() { isEyedropperMode = false; isInspectorMode = false; updateToolsUI(); }
@@ -305,17 +348,13 @@
             if(isEyedropperMode || isInspectorMode) { popup.classList.remove('open'); chatInputContainer.classList.remove('open'); }
         }
 
-        // ИЗМЕНЕНО: Теперь updateTransform дергает и трафарет
         function updateTransform() { 
             canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; 
-            if(window.updateStencilPos) window.updateStencilPos(); // Обновление трафарета
+            if(window.updateStencilPos) window.updateStencilPos(); 
             updateUI({x: -1, y: -1}); 
         }
 
-        // ИЗМЕНЕНО: 1000 на 2000
         function getCoords(clientX, clientY) { const rect = canvas.getBoundingClientRect(); return { x: Math.floor((clientX - rect.left) / (rect.width / 2000)), y: Math.floor((clientY - rect.top) / (rect.height / 2000)) }; }
-        
-        // ИЗМЕНЕНО: Добавлена проверка на клики в меню трафарета
         function isUI(e) { return e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup') || e.target.closest('#top-ui') || e.target.closest('#chat-container') || e.target.closest('#auth-overlay') || e.target.closest('#stencil-ui'); }
 
         function pickColor(clientX, clientY) { 
@@ -328,7 +367,6 @@
             cancelTools(); 
         }
 
-        // Функция просмотра автора
         function inspectPixelAction(clientX, clientY) {
             const c = getCoords(clientX, clientY);
             if (c.x >= 0 && c.x < 2000 && c.y >= 0 && c.y < 2000) {
@@ -352,10 +390,8 @@
         window.addEventListener('wheel', (e) => { if(isUI(e)) return; e.preventDefault(); const delta = e.deltaY > 0 ? 0.8 : 1.25; const newScale = Math.max(0.1, Math.min(scale * delta, 500)); panX = e.clientX - (e.clientX - panX) * (newScale / scale); panY = e.clientY - (e.clientY - panY) * (newScale / scale); scale = newScale; updateTransform(); }, {passive: false});
 
         let lastTime = 0;
-        // ИЗМЕНЕНО: 1000 на 2000
         function placePixel(c) { const now = Date.now(); if (!isActuallyAdmin && (now - lastTime < 3000)) return; if (c.x < 0 || c.x >= 2000 || c.y < 0 || c.y >= 2000) return; ctx.fillStyle = selectedColor; ctx.fillRect(c.x, c.y, 1, 1); socket.emit('drawPixel', { x: c.x, y: c.y, color: selectedColor, adminKey: adminKey }); lastTime = now; }
         
-        // ИЗМЕНЕНО: 1000 на 2000
         function updateUI(c) { if(c.x >= 0 && c.x < 2000 && c.y >= 0 && c.y < 2000) { document.getElementById('coords').innerHTML = `X: ${c.x}, Y: ${c.y} <span id="author-info" style="color:#ffaa00; margin-left:10px;">${document.getElementById('author-info').innerText}</span>`; if(scale > 2) { const rect = canvas.getBoundingClientRect(); const ps = rect.width / 2000; cursorHint.style.display = 'block'; cursorHint.style.width = ps + 'px'; cursorHint.style.height = ps + 'px'; cursorHint.style.left = (rect.left + c.x * ps) + 'px'; cursorHint.style.top = (rect.top + c.y * ps) + 'px'; } } else { cursorHint.style.display = 'none'; } }
         
         socket.on('initBoard', (data) => data.forEach(([k, c]) => { const [x,y]=k.split(','); ctx.fillStyle=c; ctx.fillRect(x,y,1,1); }));
