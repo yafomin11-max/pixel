@@ -64,8 +64,19 @@
         <div class="glass">Онлайн: <span id="online-count">0</span></div>
     </div>
     
+    <div id="stencil-ui" class="glass" style="display:none; position:fixed; top:60px; right:15px; flex-direction:column; gap:8px; z-index:101; width: 220px; font-family: sans-serif;">
+        <b style="color:#00ffff; text-align:center; font-size:14px;">Трафарет (Только тебе)</b>
+        <input type="file" id="stencil-file" accept="image/png, image/jpeg" style="font-size:11px; max-width: 100%;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">X на карте: <input type="number" id="stencil-x" value="0" style="width:60px; background:#333; color:white; border:1px solid #555; border-radius:4px; padding:2px;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">Y на карте: <input type="number" id="stencil-y" value="0" style="width:60px; background:#333; color:white; border:1px solid #555; border-radius:4px; padding:2px;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">Ширина: <input type="number" id="stencil-w" value="100" style="width:60px; background:#333; color:white; border:1px solid #555; border-radius:4px; padding:2px;"></div>
+        <div style="display:flex; flex-direction:column; gap:4px;">Прозрачность: <input type="range" id="stencil-opacity" min="0" max="1" step="0.1" value="0.5" style="width:100%;"></div>
+        <button id="stencil-clear" style="background:#ff4444; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer; font-weight:bold;">Убрать трафарет</button>
+    </div>
+
     <div id="game-container">
         <canvas id="canvas" width="2000" height="2000"></canvas>
+        <img id="stencil-img" style="position:absolute; top:0; left:0; transform-origin:0 0; pointer-events:none; opacity:0.5; display:none; z-index:2; image-rendering:pixelated;">
         <div id="cursor-hint"></div>
     </div>
 
@@ -74,7 +85,9 @@
     <div id="bottom-ui">
         <div id="palette-toggle" class="icon-btn"></div>
         <div id="eyedropper-toggle" class="icon-btn">🧪</div>
-        <div id="inspector-toggle" class="icon-btn" title="Узнать автора">🔍</div> <div id="chat-toggle" class="icon-btn">💬</div>
+        <div id="inspector-toggle" class="icon-btn" title="Узнать автора">🔍</div> 
+        <div id="stencil-toggle" class="icon-btn" title="Трафарет">🖼️</div>
+        <div id="chat-toggle" class="icon-btn">💬</div>
         
         <div id="chat-input-container">
             <input type="text" id="chat-input" placeholder="Чат..." maxlength="100">
@@ -216,6 +229,66 @@
             setTimeout(() => { if(msg && msg.parentNode) msg.parentNode.removeChild(msg); }, 8000);
         });
 
+        // --- ЛОГИКА ТРАФАРЕТА (ДОБАВЛЕНО) ---
+        const stencilToggle = document.getElementById('stencil-toggle');
+        const stencilUI = document.getElementById('stencil-ui');
+        const stencilFile = document.getElementById('stencil-file');
+        const stencilImg = document.getElementById('stencil-img');
+        const stX = document.getElementById('stencil-x');
+        const stY = document.getElementById('stencil-y');
+        const stW = document.getElementById('stencil-w');
+        const stOp = document.getElementById('stencil-opacity');
+        const stClear = document.getElementById('stencil-clear');
+
+        let stencilActive = false;
+        let stencilBaseRatio = 1;
+
+        stencilToggle.onclick = () => {
+            stencilUI.style.display = stencilUI.style.display === 'none' ? 'flex' : 'none';
+        };
+
+        stencilFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                stencilImg.src = event.target.result;
+                stencilImg.onload = () => {
+                    stencilBaseRatio = stencilImg.naturalHeight / stencilImg.naturalWidth;
+                    stencilActive = true;
+                    stencilImg.style.display = 'block';
+                    window.updateStencilPos();
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        window.updateStencilPos = function() {
+            if (!stencilActive) return;
+            const x = parseFloat(stX.value) || 0;
+            const y = parseFloat(stY.value) || 0;
+            const w = parseFloat(stW.value) || 100;
+            const h = w * stencilBaseRatio;
+            
+            stencilImg.style.width = w + 'px';
+            stencilImg.style.height = h + 'px';
+            stencilImg.style.opacity = stOp.value;
+            
+            // Синхронизация масштаба и позиции трафарета с зумом камеры
+            stencilImg.style.transform = `translate(${panX + x * scale}px, ${panY + y * scale}px) scale(${scale})`;
+        };
+
+        // Обновляем позицию на лету при изменении ползунков
+        [stX, stY, stW, stOp].forEach(input => input.addEventListener('input', window.updateStencilPos));
+
+        stClear.onclick = () => {
+            stencilActive = false;
+            stencilImg.style.display = 'none';
+            stencilImg.src = '';
+            stencilFile.value = '';
+        };
+        // ------------------------------------
+
         // ИЗМЕНЕНО: 1000 на 2000
         function resetCamera() { scale = Math.min(window.innerWidth, window.innerHeight) / 2000; panX = (window.innerWidth - 2000 * scale) / 2; panY = (window.innerHeight - 2000 * scale) / 2; updateTransform(); }
         document.getElementById('palette-toggle').onclick = () => { popup.classList.add('open'); cancelTools(); chatInputContainer.classList.remove('open'); };
@@ -232,10 +305,18 @@
             if(isEyedropperMode || isInspectorMode) { popup.classList.remove('open'); chatInputContainer.classList.remove('open'); }
         }
 
-        function updateTransform() { canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; updateUI({x: -1, y: -1}); }
+        // ИЗМЕНЕНО: Теперь updateTransform дергает и трафарет
+        function updateTransform() { 
+            canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; 
+            if(window.updateStencilPos) window.updateStencilPos(); // Обновление трафарета
+            updateUI({x: -1, y: -1}); 
+        }
+
         // ИЗМЕНЕНО: 1000 на 2000
         function getCoords(clientX, clientY) { const rect = canvas.getBoundingClientRect(); return { x: Math.floor((clientX - rect.left) / (rect.width / 2000)), y: Math.floor((clientY - rect.top) / (rect.height / 2000)) }; }
-        function isUI(e) { return e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup') || e.target.closest('#top-ui') || e.target.closest('#chat-container') || e.target.closest('#auth-overlay'); }
+        
+        // ИЗМЕНЕНО: Добавлена проверка на клики в меню трафарета
+        function isUI(e) { return e.target.closest('#bottom-ui') || e.target.closest('#full-palette-popup') || e.target.closest('#top-ui') || e.target.closest('#chat-container') || e.target.closest('#auth-overlay') || e.target.closest('#stencil-ui'); }
 
         function pickColor(clientX, clientY) { 
             const c = getCoords(clientX, clientY); 
@@ -247,7 +328,7 @@
             cancelTools(); 
         }
 
-        // ДОБАВЛЕНО: Функция просмотра автора
+        // Функция просмотра автора
         function inspectPixelAction(clientX, clientY) {
             const c = getCoords(clientX, clientY);
             if (c.x >= 0 && c.x < 2000 && c.y >= 0 && c.y < 2000) {
