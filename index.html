@@ -18,6 +18,9 @@
         #palette-toggle { background: linear-gradient(45deg, red, orange, yellow, green, blue, purple); border: 2px solid white; }
         #eyedropper-toggle.active { background: cyan; box-shadow: 0 0 10px cyan; }
         #inspector-toggle.active { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; }
+        /* ДОБАВЛЕН СТИЛЬ ДЛЯ ЛАСТИКА */
+        #eraser-toggle.active { background: #ff4444; box-shadow: 0 0 10px #ff4444; }
+        
         #active-color-preview { width: 22px; height: 22px; border-radius: 5px; border: 1px solid #555; }
         #timer { color: #aaa; font-size: 10px; font-weight: bold; width: 60px; text-align: center; }
 
@@ -93,6 +96,10 @@
         <div id="eyedropper-toggle" class="icon-btn">🧪</div>
         <div id="inspector-toggle" class="icon-btn" title="Узнать автора">🔍</div> 
         <div id="stencil-toggle" class="icon-btn" title="Трафарет">🖼️</div>
+        
+        <div id="eraser-toggle" class="icon-btn" title="Ластик (Админ)" style="display: none;">🧹</div>
+        <input type="range" id="eraser-size" min="1" max="5" step="2" value="1" title="Толщина ластика" style="display: none; width: 50px;">
+        
         <div id="chat-toggle" class="icon-btn">💬</div>
         
         <div id="chat-input-container">
@@ -122,6 +129,8 @@
         const activePreview = document.getElementById('active-color-preview');
         const eyedropperToggle = document.getElementById('eyedropper-toggle');
         const inspectorToggle = document.getElementById('inspector-toggle');
+        const eraserToggle = document.getElementById('eraser-toggle'); // НОВОЕ
+        const eraserSizeInput = document.getElementById('eraser-size'); // НОВОЕ: Ползунок толщины
         const chatContainer = document.getElementById('chat-container');
         const chatInputContainer = document.getElementById('chat-input-container');
         const chatInput = document.getElementById('chat-input');
@@ -131,12 +140,18 @@
         const adminKey = urlParams.get('admin'); 
         const isActuallyAdmin = adminKey === 'supertop';
 
-        // Показываем кнопку авто-печати только админу
-        if(isActuallyAdmin) document.getElementById('admin-auto-draw').style.display = 'block';
+        // Показываем инструменты только админу
+        if(isActuallyAdmin) {
+            document.getElementById('admin-auto-draw').style.display = 'block';
+            eraserToggle.style.display = 'flex'; // Показываем ластик
+        }
 
         let scale = 1, panX = 0, panY = 0, isDragging = false, startX, startY, hasMoved = false, lastDist = 0;
         let isEyedropperMode = false;
         let isInspectorMode = false;
+        let isEraserMode = false; // НОВОЕ: Режим ластика
+        let isErasingDrag = false; // НОВОЕ: Рисуем ли ластиком прямо сейчас при зажатии
+        let lastErasedCoords = { x: -1, y: -1 }; // НОВОЕ: Защита от спама и лагов сервера при рисовании ластиком
         let myUsername = "Аноним";
 
         document.getElementById('login-btn').onclick = () => {
@@ -321,7 +336,7 @@
                     if (a > 10) {
                         const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
                         
-                        // ДОБАВЛЕНО: Сразу рисуем пиксель у себя на экране для визуального эффекта
+                        // Сразу рисуем пиксель у себя на экране для визуального эффекта
                         ctx.fillStyle = hex;
                         ctx.fillRect(startX + x, startY + y, 1, 1);
 
@@ -334,8 +349,7 @@
                         });
                         
                         pixelsDrawn++;
-                        // ИЗМЕНЕНО: Задержка теперь не на каждый пиксель, а блоками по 5 штук + минимальный таймаут (1мс вместо 20мс)
-                        // Это значительно ускоряет процесс, но оставляет красивый визуальный эффект
+                        // Задержка теперь не на каждый пиксель, а блоками по 5 штук + минимальный таймаут (1мс)
                         if (pixelsDrawn % 5 === 0) {
                             await new Promise(res => setTimeout(res, 1)); 
                         }
@@ -350,14 +364,24 @@
         document.getElementById('palette-toggle').onclick = () => { popup.classList.add('open'); cancelTools(); chatInputContainer.classList.remove('open'); };
         document.getElementById('close-btn').onclick = () => popup.classList.remove('open');
         
-        eyedropperToggle.onclick = () => { isEyedropperMode = !isEyedropperMode; isInspectorMode = false; updateToolsUI(); };
-        inspectorToggle.onclick = () => { isInspectorMode = !isInspectorMode; isEyedropperMode = false; updateToolsUI(); };
-        function cancelTools() { isEyedropperMode = false; isInspectorMode = false; updateToolsUI(); }
+        eyedropperToggle.onclick = () => { isEyedropperMode = !isEyedropperMode; isInspectorMode = false; isEraserMode = false; updateToolsUI(); };
+        inspectorToggle.onclick = () => { isInspectorMode = !isInspectorMode; isEyedropperMode = false; isEraserMode = false; updateToolsUI(); };
+        eraserToggle.onclick = () => { isEraserMode = !isEraserMode; isEyedropperMode = false; isInspectorMode = false; updateToolsUI(); }; // НОВОЕ
+        
+        function cancelTools() { isEyedropperMode = false; isInspectorMode = false; isEraserMode = false; updateToolsUI(); }
+        
         function updateToolsUI() {
             eyedropperToggle.classList.toggle('active', isEyedropperMode);
             inspectorToggle.classList.toggle('active', isInspectorMode);
-            canvas.style.cursor = isEyedropperMode ? 'crosshair' : (isInspectorMode ? 'help' : 'auto');
-            if(isEyedropperMode || isInspectorMode) { popup.classList.remove('open'); chatInputContainer.classList.remove('open'); }
+            eraserToggle.classList.toggle('active', isEraserMode); // НОВОЕ
+            
+            // НОВОЕ: Показываем ползунок размера, если мы админ и включили ластик
+            if(isActuallyAdmin) {
+                eraserSizeInput.style.display = isEraserMode ? 'inline-block' : 'none';
+            }
+
+            canvas.style.cursor = isEyedropperMode ? 'crosshair' : (isInspectorMode ? 'help' : (isEraserMode ? 'cell' : 'auto'));
+            if(isEyedropperMode || isInspectorMode || isEraserMode) { popup.classList.remove('open'); chatInputContainer.classList.remove('open'); }
         }
 
         function updateTransform() { 
@@ -392,13 +416,94 @@
             setTimeout(() => { document.getElementById('author-info').innerText = ''; }, 5000);
         });
 
-        window.addEventListener('mousedown', (e) => { if(isUI(e)) return; if(isEyedropperMode || isInspectorMode) return; isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY; });
-        window.addEventListener('mousemove', (e) => { const c = getCoords(e.clientX, e.clientY); updateUI(c); if (!isDragging) return; hasMoved = true; panX = e.clientX - startX; panY = e.clientY - startY; updateTransform(); });
-        window.addEventListener('mouseup', (e) => { if(isUI(e)) return; if(isEyedropperMode) { pickColor(e.clientX, e.clientY); return; } if(isInspectorMode) { inspectPixelAction(e.clientX, e.clientY); return; } if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY)); isDragging = false; });
+        // НОВОЕ: Функция закрашивания пикселей в белый цвет для ластика (с учетом толщины)
+        function erasePixelAction(clientX, clientY) {
+            const c = getCoords(clientX, clientY);
+            
+            // Защита от спама (чтобы не закрашивать одну и ту же клетку 100 раз в секунду при медленном ведении мыши)
+            if (c.x === lastErasedCoords.x && c.y === lastErasedCoords.y) return; 
+            lastErasedCoords = { x: c.x, y: c.y };
+
+            const size = parseInt(eraserSizeInput.value) || 1;
+            const offset = Math.floor(size / 2);
+
+            for (let i = -offset; i <= offset; i++) {
+                for (let j = -offset; j <= offset; j++) {
+                    const px = c.x + i;
+                    const py = c.y + j;
+                    if (px >= 0 && px < 2000 && py >= 0 && py < 2000) {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(px, py, 1, 1);
+                        socket.emit('drawPixel', { x: px, y: py, color: '#ffffff', adminKey: adminKey });
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('mousedown', (e) => { 
+            if(isUI(e)) return; 
+            if(isEyedropperMode || isInspectorMode) return; 
+            // НОВОЕ: Если мы админ и включили ластик, начинаем стирать
+            if(isEraserMode && isActuallyAdmin) { isErasingDrag = true; erasePixelAction(e.clientX, e.clientY); return; }
+            
+            isDragging = true; hasMoved = false; startX = e.clientX - panX; startY = e.clientY - panY; 
+        });
         
-        window.addEventListener('touchstart', (e) => { if(isUI(e)) return; if (e.touches.length === 1) { if(isEyedropperMode || isInspectorMode) return; isDragging = true; hasMoved = false; startX = e.touches[0].clientX - panX; startY = e.touches[0].clientY - panY; } else if (e.touches.length === 2) { cancelTools(); isDragging = false; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } }, {passive: false});
-        window.addEventListener('touchmove', (e) => { if(isUI(e)) return; e.preventDefault(); if (e.touches.length === 1 && isDragging) { hasMoved = true; panX = e.touches[0].clientX - startX; panY = e.touches[0].clientY - startY; updateTransform(); } else if (e.touches.length === 2) { const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); const delta = dist / lastDist; const newScale = Math.max(0.1, Math.min(scale * delta, 500)); const midX = (e.touches[0].clientX + e.touches[1].clientX)/2; const midY = (e.touches[0].clientY + e.touches[1].clientY)/2; panX = midX - (midX - panX) * (newScale / scale); panY = midY - (midY - panY) * (newScale / scale); scale = newScale; lastDist = dist; updateTransform(); } }, {passive: false});
-        window.addEventListener('touchend', (e) => { if(isUI(e)) return; if(isEyedropperMode) { pickColor(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; } if(isInspectorMode) { inspectPixelAction(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; } if (!hasMoved && isDragging) placePixel(getCoords(e.changedTouches[0].clientX, e.changedTouches[0].clientY)); isDragging = false; lastDist = 0; });
+        window.addEventListener('mousemove', (e) => { 
+            const c = getCoords(e.clientX, e.clientY); updateUI(c); 
+            // НОВОЕ: Если мы сейчас зажали ластик, просто стираем (без движения камеры)
+            if(isErasingDrag) { erasePixelAction(e.clientX, e.clientY); return; }
+            
+            if (!isDragging) return; hasMoved = true; panX = e.clientX - startX; panY = e.clientY - startY; updateTransform(); 
+        });
+        
+        window.addEventListener('mouseup', (e) => { 
+            if(isUI(e)) return; 
+            // НОВОЕ: Прекращаем стирать
+            if(isErasingDrag) { isErasingDrag = false; return; }
+            
+            if(isEyedropperMode) { pickColor(e.clientX, e.clientY); return; } 
+            if(isInspectorMode) { inspectPixelAction(e.clientX, e.clientY); return; } 
+            if(!hasMoved && isDragging) placePixel(getCoords(e.clientX, e.clientY)); 
+            isDragging = false; 
+        });
+        
+        window.addEventListener('touchstart', (e) => { 
+            if(isUI(e)) return; 
+            if (e.touches.length === 1) { 
+                if(isEyedropperMode || isInspectorMode) return; 
+                // НОВОЕ: Старт ластика на телефоне
+                if(isEraserMode && isActuallyAdmin) { isErasingDrag = true; erasePixelAction(e.touches[0].clientX, e.touches[0].clientY); return; }
+                
+                isDragging = true; hasMoved = false; startX = e.touches[0].clientX - panX; startY = e.touches[0].clientY - panY; 
+            } else if (e.touches.length === 2) { 
+                cancelTools(); isDragging = false; isErasingDrag = false; lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); 
+            } 
+        }, {passive: false});
+        
+        window.addEventListener('touchmove', (e) => { 
+            if(isUI(e)) return; e.preventDefault(); 
+            // НОВОЕ: Стираем в движении на телефоне
+            if(isErasingDrag && e.touches.length === 1) { erasePixelAction(e.touches[0].clientX, e.touches[0].clientY); return; }
+            
+            if (e.touches.length === 1 && isDragging) { 
+                hasMoved = true; panX = e.touches[0].clientX - startX; panY = e.touches[0].clientY - startY; updateTransform(); 
+            } else if (e.touches.length === 2) { 
+                const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); const delta = dist / lastDist; const newScale = Math.max(0.1, Math.min(scale * delta, 500)); const midX = (e.touches[0].clientX + e.touches[1].clientX)/2; const midY = (e.touches[0].clientY + e.touches[1].clientY)/2; panX = midX - (midX - panX) * (newScale / scale); panY = midY - (midY - panY) * (newScale / scale); scale = newScale; lastDist = dist; updateTransform(); 
+            } 
+        }, {passive: false});
+        
+        window.addEventListener('touchend', (e) => { 
+            if(isUI(e)) return; 
+            // НОВОЕ: Закончили стирать на телефоне
+            if(isErasingDrag) { isErasingDrag = false; return; }
+            
+            if(isEyedropperMode) { pickColor(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; } 
+            if(isInspectorMode) { inspectPixelAction(e.changedTouches[0].clientX, e.changedTouches[0].clientY); return; } 
+            if (!hasMoved && isDragging) placePixel(getCoords(e.changedTouches[0].clientX, e.changedTouches[0].clientY)); 
+            isDragging = false; lastDist = 0; 
+        });
+        
         window.addEventListener('wheel', (e) => { if(isUI(e)) return; e.preventDefault(); const delta = e.deltaY > 0 ? 0.8 : 1.25; const newScale = Math.max(0.1, Math.min(scale * delta, 500)); panX = e.clientX - (e.clientX - panX) * (newScale / scale); panY = e.clientY - (e.clientY - panY) * (newScale / scale); scale = newScale; updateTransform(); }, {passive: false});
 
         let lastTime = 0;
